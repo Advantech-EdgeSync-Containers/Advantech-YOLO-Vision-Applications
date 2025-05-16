@@ -230,9 +230,3 @@ This toolkit is ideal for:
 Copyright (c) 2025 Advantech Corporation. All rights reserved.
 
 This software is provided by Advantech Corporation "as is" and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed.
-
-## Contact
-
-Samir Singh - samir.singh@advantech.com
-
-Advantech Center of Excellence
