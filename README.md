@@ -205,9 +205,6 @@ The following enhancements are planned for future releases:
 - **Multi-stream Processing**: Support for processing multiple camera streams simultaneously
 - **REST API Interface**: HTTP API for remote inference triggering and results retrieval
 - **Anomaly Detection**: Algorithms for identifying unusual patterns and behaviors
-- **Edge-to-Cloud Integration**: Seamless synchronization with cloud services for data backup and advanced analytics
-- **Advanced Camera Integration**: Native support for  multi-camera arrays
-- **Federated Learning**: Distributed model improvement across multiple deployed devices
 - **Automated Model Optimization**: Dynamic model adaptation based on deployment conditions
 - **Scene Understanding**: Moving from object detection to comprehensive scene interpretation
 - **Multi-sensor Fusion**: Integration with non-visual sensors for enhanced perception
@@ -230,3 +227,16 @@ This toolkit is ideal for:
 Copyright (c) 2025 Advantech Corporation. All rights reserved.
 
 This software is provided by Advantech Corporation "as is" and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed.
+
+For complete license details, see the [LICENSE](https://github.com/Advantech-EdgeSync-Containers/Advantech-YOLO-Vision-Applications/blob/main/LICENSE) file.
+
+## Acknowledgments
+
+- **[Ultralytics](https://github.com/ultralytics/ultralytics)**: For the YOLOv8 framework that powers this toolkit. 
+  ```bash
+  # Required specific versions:
+  pip install ultralytics==8.0.43 --no-deps
+  pip install ultralytics-thop==2.0.14 --no-deps
+  ```
+
+- **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
