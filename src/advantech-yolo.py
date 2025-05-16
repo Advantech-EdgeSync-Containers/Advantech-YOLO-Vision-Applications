@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ==========================================================================
-# Advantech YOLO Application with Hardware Acceleration
+# Enhanced YOLO Application with Hardware Acceleration
 # ==========================================================================
 # Version:      1.3.0
 # Author:       Samir Singh <samir.singh@advantech.com>
@@ -8,7 +8,7 @@
 # Last Updated: May 16, 2025
 # 
 # Description:
-#   This application provides hardware-accelerated YOLO inference for
+#   This application provides hardware-accelerated YOLOv8 inference for
 #   object detection, segmentation, and classification tasks on Advantech
 #   edge AI devices. It automatically detects hardware capabilities and
 #   optimizes performance for NVIDIA Jetson platforms.
@@ -257,122 +257,127 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def preprocess_video(input_file, output_file, scale=None, fps=None, hw_accel=None):
     print(f"Pre-processing video: {input_file} -> {output_file}")
-    
-    cmd = ['ffmpeg', '-y']
-    
-    if hw_accel and hw_accel.get('ffmpeg_hwaccel', False):
-        hwaccels = hw_accel.get('ffmpeg_hwaccels', [])
-        
-        if 'vaapi' in hwaccels:
-            cmd.extend(['-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi'])
-        elif 'nvdec' in hwaccels:
-            cmd.extend(['-hwaccel', 'nvdec'])
-        elif 'cuda' in hwaccels:
-            cmd.extend(['-hwaccel', 'cuda'])
-        elif 'vdpau' in hwaccels:
-            cmd.extend(['-hwaccel', 'vdpau'])
-        elif 'drm' in hwaccels:
-            cmd.extend(['-hwaccel', 'drm'])
-    
-    cmd.extend(['-i', input_file])
-    
-    if scale:
-        width, height = scale
-        cmd.extend(['-vf', f'scale={width}:{height}'])
-    
-    if fps:
-        cmd.extend(['-r', str(fps)])
-    
-    if hw_accel and hw_accel.get('nvenc', False):
-        try:
-            check_cmd = ['ffmpeg', '-hide_banner', '-encoders']
-            result = subprocess.run(check_cmd, capture_output=True, text=True, check=False)
-            if 'h264_nvenc' in result.stdout:
-                cmd.extend(['-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'fastdecode', 
-                            '-b:v', '2M', '-maxrate', '2M', '-bufsize', '2M', '-pix_fmt', 'yuv420p'])
-            else:
-                print("h264_nvenc encoder not available, falling back to h264_v4l2m2m")
-                if hw_accel.get('v4l2', False):
-                    cmd.extend(['-c:v', 'h264_v4l2m2m', '-b:v', '2M', '-pix_fmt', 'yuv420p'])
-                else:
-                    cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-        except Exception as e:
-            print(f"Error checking for h264_nvenc: {e}")
-            cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-    elif hw_accel and hw_accel.get('v4l2', False):
-        cmd.extend(['-c:v', 'h264_v4l2m2m', '-b:v', '2M', '-pix_fmt', 'yuv420p'])
-    else:
-        cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-    
-    cmd.append(output_file)
-    
-    print(f"Running command: {' '.join(cmd)}")
+    gst_cmd = ['gst-launch-1.0']
+    gst_cmd.extend([f'filesrc location={input_file}', '!', 'decodebin', '!', 'nvvidconv'])
+    if scale: width, height = scale; gst_cmd.append(f'! video/x-raw,width={width},height={height}')
+    if fps: gst_cmd.append(f'! videorate ! video/x-raw,framerate={fps}/1')
+    gst_cmd.extend(['!', 'nvv4l2h264enc', '!', 'h264parse', '!', 'qtmux', '!', f'filesink location={output_file}'])
+    gst_command = " ".join(gst_cmd)
+    print(f"Running GStreamer command: {gst_command}")
     try:
-        process = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if process.returncode != 0:
-            print(f"❌ FFmpeg preprocessing failed: {process.stderr}")
-            return False
-        else:
-            print("✅ Video preprocessing complete")
-            return True
+        process = subprocess.run(gst_command, shell=True, capture_output=True, text=True, check=False)
+        if process.returncode == 0: print("✅ GStreamer video preprocessing complete"); return True
+        else: print(f"❌ GStreamer preprocessing failed: {process.stderr}"); return False
     except Exception as e:
         print(f"❌ Error during preprocessing: {e}")
         return False
 
 def create_video_from_frames(frame_dir, output_file, fps=30, hw_accel=None):
     print(f"Creating video from frames in {frame_dir} -> {output_file}")
-    
-    if not os.path.exists(frame_dir):
-        print(f"❌ Frames directory not found: {frame_dir}")
-        return False
-    
+    if not os.path.exists(frame_dir): print(f"❌ Frames directory not found: {frame_dir}"); return False
     frames = sorted(list(Path(frame_dir).glob("*.jpg")))
-    if not frames:
-        print(f"❌ No frames found in {frame_dir}")
-        return False
+    if not frames: print(f"❌ No frames found in {frame_dir}"); return False
+    num_frames = len(frames)
+    print(f"Found {num_frames} frames to process")
     
-    print(f"Found {len(frames)} frames to process")
-    
-    cmd = ['ffmpeg', '-y']
-    
-    first_frame = frames[0].name
-    frame_pattern = first_frame.split('_')[0] + "_%06d.jpg"
-    cmd.extend(['-framerate', str(fps), '-i', f"{frame_dir}/{frame_pattern}"])
-    
-    if hw_accel and hw_accel.get('nvenc', False):
-        try:
-            check_cmd = ['ffmpeg', '-hide_banner', '-encoders']
-            result = subprocess.run(check_cmd, capture_output=True, text=True, check=False)
-            if 'h264_nvenc' in result.stdout:
-                cmd.extend(['-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'fastdecode', 
-                            '-b:v', '2M', '-maxrate', '2M', '-bufsize', '2M', '-pix_fmt', 'yuv420p'])
-            else:
-                print("h264_nvenc encoder not available, falling back to h264_v4l2m2m")
-                if hw_accel.get('v4l2', False):
-                    cmd.extend(['-c:v', 'h264_v4l2m2m', '-b:v', '2M', '-pix_fmt', 'yuv420p'])
-                else:
-                    cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-        except Exception as e:
-            print(f"Error checking for h264_nvenc: {e}")
-            cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-    elif hw_accel and hw_accel.get('v4l2', False):
-        cmd.extend(['-c:v', 'h264_v4l2m2m', '-b:v', '2M', '-pix_fmt', 'yuv420p'])
-    else:
-        cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-    
-    cmd.append(output_file)
-    
-    print(f"Running command: {' '.join(cmd)}")
+    # Get first frame dimensions
     try:
-        process = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if process.returncode != 0:
-            print(f"❌ FFmpeg video creation failed: {process.stderr}")
-            return False
+        import cv2
+        first_frame = cv2.imread(str(frames[0]))
+        if first_frame is None:
+            print(f"❌ Could not read first frame: {frames[0]}")
+            height, width = 720, 1280  # Default fallback dimensions
         else:
-            print("✅ Video creation complete")
-            return True
+            height, width = first_frame.shape[:2]
+            print(f"Frame dimensions: {width}x{height}")
+    except Exception as e:
+        print(f"❌ Error getting frame dimensions: {e}")
+        height, width = 720, 1280  # Default fallback dimensions
+    
+    temp_dir = os.path.join(frame_dir, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    for i, frame in enumerate(frames): shutil.copy(frame, os.path.join(temp_dir, f"img_{i:06d}.jpg"))
+    frame_pattern = f"{temp_dir}/img_%06d.jpg"
+    
+    # Convert fps to a proper fraction for GStreamer
+    from fractions import Fraction
+    fps_fraction = Fraction(fps).limit_denominator(100)
+    gst_fps = f"{fps_fraction.numerator}/{fps_fraction.denominator}"
+    print(f"Using framerate: {fps} → {gst_fps}")
+    
+    # GStreamer pipeline with full caps specification (including width and height)
+    gst_cmd = [
+        'gst-launch-1.0',
+        'multifilesrc',
+        f'location={frame_pattern}',
+        'index=0',
+        '!',
+        f'image/jpeg,framerate={gst_fps},width={width},height={height}',
+        '!',
+        'jpegdec',
+        '!',
+        'videoconvert',
+        '!',
+        'nvvidconv',
+        '!',
+        'nvv4l2h264enc',
+        '!',
+        'h264parse',
+        '!',
+        'qtmux',
+        '!',
+        f'filesink location={output_file}'
+    ]
+    gst_command = " ".join(gst_cmd)
+    
+    print(f"Running GStreamer command: {gst_command}")
+    try:
+        process = subprocess.run(gst_command, shell=True, capture_output=True, text=True, check=False)
+        success = process.returncode == 0
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        if success: print("✅ GStreamer video creation complete"); return True
+        else:
+            print(f"❌ GStreamer video creation failed: {process.stderr}")
+            original_frame_pattern = f"{frame_dir}/frame_%06d.jpg"
+            
+            # Alternative approach with complete caps filter
+            alt_cmd = [
+                'gst-launch-1.0',
+                'multifilesrc',
+                f'location={original_frame_pattern}',
+                'index=1',
+                '!',
+                f'image/jpeg,framerate={gst_fps},width={width},height={height}',
+                '!',
+                'jpegdec',
+                '!',
+                'videoconvert',
+                '!',
+                'nvvidconv',
+                '!',
+                'nvv4l2h264enc',
+                '!',
+                'h264parse',
+                '!',
+                'qtmux',
+                '!',
+                f'filesink location={output_file}'
+            ]
+            alt_command = " ".join(alt_cmd)
+            
+            print(f"Trying alternative GStreamer approach: {alt_command}")
+            alt_process = subprocess.run(alt_command, shell=True, capture_output=True, text=True, check=False)
+            if alt_process.returncode == 0: print("✅ Alternative GStreamer approach successful"); return True
+            else:
+                print(f"❌ All GStreamer approaches failed, trying fallback method with ffmpeg")
+                ffmpeg_command = (f'ffmpeg -y -framerate {fps} -i "{frame_dir}/frame_%06d.jpg" -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p "{output_file}"')
+                print(f"Running ffmpeg fallback: {ffmpeg_command}")
+                ffmpeg_process = subprocess.run(ffmpeg_command, shell=True, capture_output=True, text=True, check=False)
+                if ffmpeg_process.returncode == 0: print("✅ Fallback ffmpeg approach successful"); return True
+                else: print(f"❌ All approaches failed to create video from frames"); return False
     except Exception as e:
         print(f"❌ Error during video creation: {e}")
+        shutil.rmtree(temp_dir, ignore_errors=True)
         return False
 
 class YOLOHWAccelerated:
