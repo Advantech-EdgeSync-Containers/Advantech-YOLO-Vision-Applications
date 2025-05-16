@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ==========================================================================
-# Enhanced YOLO Application with Hardware Acceleration
+# Advantech YOLO Application with Hardware Acceleration
 # ==========================================================================
 # Version:      1.3.0
 # Author:       Samir Singh <samir.singh@advantech.com>
@@ -8,7 +8,7 @@
 # Last Updated: May 16, 2025
 # 
 # Description:
-#   This application provides hardware-accelerated YOLOv8 inference for
+#   This application provides hardware-accelerated YOLO inference for
 #   object detection, segmentation, and classification tasks on Advantech
 #   edge AI devices. It automatically detects hardware capabilities and
 #   optimizes performance for NVIDIA Jetson platforms.
