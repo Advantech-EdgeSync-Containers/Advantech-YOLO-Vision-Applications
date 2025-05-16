@@ -159,9 +159,9 @@ python3 src/advantech-yolo.py --input data/image.jpg --task classify --model yol
 ├── src/                # Source code for applications
 │   ├── advantech-coe-model-export.py  # Model export utility
 │   ├── advantech-coe-model-load.py    # Model download utility
-│   ├── advantech-yolo.py              # Main YOLOv8 application
-│   └── build.sh                       # Build script
+│   └── advantech-yolo.py              # Main YOLO application
 ├── docker-compose.yml  # Docker Compose configuration
+├── build.sh            # Build script
 ├── LICENSE             # License information
 └── README.md           # This file
 ```
