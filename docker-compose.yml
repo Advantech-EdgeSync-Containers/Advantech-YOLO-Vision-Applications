@@ -29,7 +29,7 @@ version: '2.4'
 
 services:
   advantech-yolo-vision:
-    image: harbor.arfa.wise-paas.com/advantech_coa_container/advantech-yolo-vision-applications:v1
+    image: edgesync.azurecr.io/advantech/advantech-yolo-vision-applications:1.0.0-Ubuntu20.04-ARM
     container_name: advantech-yolo-vision
     privileged: true
     ipc: host
