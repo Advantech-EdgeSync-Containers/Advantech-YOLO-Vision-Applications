@@ -364,7 +364,7 @@ def get_export_options(device_info, dependencies, system_libraries):
             "requires": ["tensorrt"],
             "compatible": True,
             "recommended": False,
-            "workspace": 4.0,
+            "workspace": 4,
         })
     if dependencies["openvino"]["installed"]:
         export_options.append({
@@ -829,7 +829,7 @@ def batch_export_models(selected_models, export_option):
             "optimize": export_option["optimize"],
         }
         if export_option["format"] == "engine":
-            export_args["workspace"] = 4.0
+            export_args["workspace"] = 4
         print_progress(f"Loading model: {model_info['model_file']}")
         model = load_model(
             task=model_info['task'],
@@ -898,7 +898,7 @@ def main():
                       help='Do not simplify ONNX model')
     parser.add_argument('--opset', type=int, default=12,
                       help='ONNX opset version')
-    parser.add_argument('--workspace', type=float, default=4.0,
+    parser.add_argument('--workspace', type=float, default=4,
                       help='TensorRT workspace size (GB)')
     parser.add_argument('--list', action='store_true',
                       help='List export options and exit')
