@@ -11,7 +11,7 @@
 # Description:
 #   This utility enables batch conversion of YOLO models to optimized formats
 #   for deployment on Advantech edge AI devices with hardware acceleration.
-#   Supports object detection, segmentation, classification, and pose estimation.
+#   Supports object detection, segmentation, classification.
 #
 # Terms and Conditions:
 #   1. This software is provided by Advantech Corporation "as is" and any
@@ -509,8 +509,6 @@ def get_model_path(task, size):
         return f"yolov8{size}-seg.pt"
     elif task == 'classification':
         return f"yolov8{size}-cls.pt"
-    elif task == 'pose':
-        return f"yolov8{size}-pose.pt"
     else:
         raise ValueError(f"Unknown task: {task}")
 
@@ -728,7 +726,6 @@ def display_task_options():
         {"id": 1, "name": "Object Detection", "task": "detection", "description": "Detect and localize objects with bounding boxes"},
         {"id": 2, "name": "Instance Segmentation", "task": "segmentation", "description": "Detect objects and create pixel-level masks"},
         {"id": 3, "name": "Classification", "task": "classification", "description": "Classify images into different categories"},
-        {"id": 4, "name": "Pose Estimation", "task": "pose", "description": "Detect human poses (keypoints/skeletons)"}
     ]
     for task in tasks:
         print(f"{Colors.BOLD}[{task['id']}] {task['name']}{Colors.ENDC}")
@@ -753,8 +750,6 @@ def display_model_size_options(task):
             model_file = f"yolov8{size['size']}-seg.pt"
         elif task == "classification":
             model_file = f"yolov8{size['size']}-cls.pt"
-        elif task == "pose":
-            model_file = f"yolov8{size['size']}-pose.pt"
         else:
             model_file = f"yolov8{size['size']}.pt"
         print(f"{Colors.BOLD}[{size['id']}] {size['name']} (YOLOv8{size['size']}){Colors.ENDC}")
@@ -868,12 +863,12 @@ def batch_export_models(selected_models, export_option):
     return successful_exports, failed_exports
 
 def main():
-    parser = argparse.ArgumentParser(description='Enhanced YOLOv8 Export Utility for Advantech Devices')
+    parser = argparse.ArgumentParser(description='YOLO Export Utility for Advantech Devices')
     parser.add_argument('--batch-mode', action='store_true',
                       help='Enable batch mode for exporting multiple models')
     parser.add_argument('--task', type=str, default='detection',
-                      choices=['detection', 'segmentation', 'classification', 'pose'],
-                      help='Task type (detection, segmentation, classification, pose)')
+                      choices=['detection', 'segmentation', 'classification'],
+                      help='Task type (detection, segmentation, classification)')
     parser.add_argument('--size', type=str, default='n',
                       choices=['n', 's', 'm', 'l', 'x'],
                       help='Model size (n, s, m, l, x)')
@@ -906,7 +901,7 @@ def main():
                       help='Show required libraries for each format')
     args = parser.parse_args()
     os.system('clear')
-    print_header("Enhanced YOLOv8 Export Utility for Advantech Devices", shutil.get_terminal_size().columns)
+    print_header("YOLO Export Utility for Advantech Devices", shutil.get_terminal_size().columns)
     print_progress("Detecting hardware...")
     device_info = detect_device()
     print_progress("Checking software dependencies...")

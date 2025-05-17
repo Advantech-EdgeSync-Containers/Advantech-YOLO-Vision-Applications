@@ -11,7 +11,7 @@
 # Description:
 #   This utility detects Advantech device capabilities and provides
 #   optimized YOLO model recommendations for detection, segmentation,
-#   classification, and pose estimation tasks. It automatically downloads
+#   classification tasks. It automatically downloads
 #   models and provides usage instructions based on device specifications.
 #
 # Terms and Conditions:
@@ -291,7 +291,6 @@ def get_recommended_models(device_info):
         "detection": {"recommended": "", "max_size": "", "options": []},
         "segmentation": {"recommended": "", "max_size": "", "options": []},
         "classification": {"recommended": "", "max_size": "", "options": []},
-        "pose": {"recommended": "", "max_size": "", "options": []},
     }
     if "Orin" in device_info["model_type"]:
         if "AGX" in device_info["model_type"]:
@@ -336,8 +335,6 @@ def get_recommended_models(device_info):
                 model_name = f"yolov8{size}-seg.pt"
             elif task == "classification":
                 model_name = f"yolov8{size}-cls.pt"
-            elif task == "pose":
-                model_name = f"yolov8{size}-pose.pt"
             else:
                 continue
             option = {
@@ -361,8 +358,6 @@ def get_recommended_models(device_info):
                 model_name = f"yolov8{size}-seg.pt"
             elif task == "classification":
                 model_name = f"yolov8{size}-cls.pt"
-            elif task == "pose":
-                model_name = f"yolov8{size}-pose.pt"
             else:
                 continue
             option = {
@@ -496,7 +491,6 @@ def download_model(model_name):
             print("  - Detection models: yolov8n.pt, yolov8s.pt, etc.")
             print("  - Segmentation models: yolov8n-seg.pt, yolov8s-seg.pt, etc.")
             print("  - Classification models: yolov8n-cls.pt, yolov8s-cls.pt, etc.")
-            print("  - Pose models: yolov8n-pose.pt, yolov8s-pose.pt, etc.")
         return None
 
 def list_dependencies(model_name, download_dir=None):
@@ -513,8 +507,6 @@ def list_dependencies(model_name, download_dir=None):
     }
     if "seg" in model_name:
         dependencies["matplotlib"] = {"required": True, "for": "Segmentation visualization"}
-    elif "pose" in model_name:
-        dependencies["matplotlib"] = {"required": True, "for": "Pose visualization"}
     headers = ["Package", "Status", "Required For"]
     rows = []
     for pkg, info in dependencies.items():
@@ -558,7 +550,7 @@ def main():
     parser = argparse.ArgumentParser(description='YOLOv8 Model Downloader for Advantech Devices')
     parser.add_argument('--list', action='store_true', help='List recommended models and exit')
     parser.add_argument('--model', type=str, help='Specify model to download (e.g., yolov8n.pt)')
-    parser.add_argument('--task', type=str, choices=['detection', 'segmentation', 'classification', 'pose'], 
+    parser.add_argument('--task', type=str, choices=['detection', 'segmentation', 'classification'], 
                       help='Task type to download model for')
     parser.add_argument('--size', type=str, choices=['n', 's', 'm', 'l', 'x'], 
                       help='Model size to download')
@@ -590,8 +582,6 @@ def main():
             model_name = f"yolov8{args.size}-seg.pt"
         elif args.task == 'classification':
             model_name = f"yolov8{args.size}-cls.pt"
-        elif args.task == 'pose':
-            model_name = f"yolov8{args.size}-pose.pt"
         model = download_model(model_name)
         if model:
             list_dependencies(model_name)
