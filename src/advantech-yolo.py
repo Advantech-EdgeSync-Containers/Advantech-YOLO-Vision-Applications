@@ -2,7 +2,7 @@
 # ==========================================================================
 # Enhanced YOLO Application with Hardware Acceleration
 # ==========================================================================
-# Version:      1.3.0
+# Version:      3.0
 # Author:       Samir Singh <samir.singh@advantech.com>
 # Created:      March 25, 2025
 # Last Updated: May 16, 2025
