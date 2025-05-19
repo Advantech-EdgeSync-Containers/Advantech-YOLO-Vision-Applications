@@ -143,7 +143,7 @@ def detect_advantech_device():
                     device_info["jetpack_info"] = jetpack_info
                     if "t186ref" in jetpack_info:
                         device_info["model_type"] = "Advantech Xavier-based AIE"
-                        device_info["memory_gb"] = 32
+                        device_info["memory_gb"] = 16
                         device_info["cuda_cores"] = 512
                         device_info["architecture"] = "Volta"
                         device_info["compute_capability"] = "7.2"
