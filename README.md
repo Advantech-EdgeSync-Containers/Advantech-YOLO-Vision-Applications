@@ -23,6 +23,7 @@ Designed specifically for Advantech edge AI devices based on NVIDIA Jetson platf
 - Support for 80+ COCO dataset classes
 - Configurable confidence thresholds and post-processing
 
+
 ### Instance Segmentation
 - Pixel-level object segmentation for precise boundary detection
 - Multi-class segmentation capabilities
@@ -56,21 +57,21 @@ chmod +x build.sh
 The `advantech-coe-model-load.py` utility helps download optimized YOLOv8 models for your Advantech device:
 
 ```bash
-python3 src/advantech-coe-model-load.py [--task TASK] [--size SIZE] [--dir DIR]
+python3 src/advantech-coe-model-load.py 
 ```
 
 Parameters:
-- `--task`: Choose from 'detection', 'segmentation', or 'classification' (default: detection)
-- `--size`: Model size, use 'n' for nano or 's' for small (default: based on device)
-- `--dir`: Directory to save models (default: current directory)
+- `task`: Choose from 'detection', 'segmentation', or 'classification' (default: detection)
+- `size`: Model size, use 'n' for nano or 's' for small (default: based on device)
+- `dir`: Directory to save models (default: current directory)
 
 Examples:
 ```bash
 # Download a YOLOv8n detection model
-python3 src/advantech-coe-model-load.py --task detection --size n
+python3 src/advantech-coe-model-load.py 
 
 # Download a YOLOv8s segmentation model
-python3 src/advantech-coe-model-load.py --task segmentation --size s --dir ./models
+python3 src/advantech-coe-model-load.py 
 ```
 
 ### Model Export Utility
@@ -78,23 +79,23 @@ python3 src/advantech-coe-model-load.py --task segmentation --size s --dir ./mod
 The `advantech-coe-model-export.py` utility converts YOLOv8 models to optimized formats for edge deployment:
 
 ```bash
-python3 src/advantech-coe-model-export.py [--task TASK] [--size SIZE] [--format FORMAT] [--device DEVICE]
+python3 src/advantech-coe-model-export.py
 ```
 
 Parameters:
-- `--task`: Choose from 'detection', 'segmentation', or 'classification'
-- `--size`: Model size ('n' or 's' recommended)
-- `--format`: Export format (onnx, engine, torchscript)
-- `--device`: Device for optimization (cpu or 0 for GPU)
-- `--half`: Enable half precision (FP16) for faster inference
+- `task`: Choose from 'detection', 'segmentation', or 'classification'
+- `size`: Model size ('n' or 's' recommended)
+- `format`: Export format (onnx, engine, torchscript)
+- `device`: Device for optimization (cpu or 0 for GPU)
+- `half`: Enable half precision (FP16) for faster inference
 
 Examples:
 ```bash
 # Export YOLOv8n to ONNX format
-python3 src/advantech-coe-model-export.py --task detection --size n --format onnx
+python3 src/advantech-coe-model-export.py 
 
 # Export YOLOv8s segmentation model to TensorRT engine with half precision
-python3 src/advantech-coe-model-export.py --task segmentation --size s --format engine --device 0 --half
+python3 src/advantech-coe-model-export.py 
 ```
 
 ## Application Usage
@@ -104,9 +105,16 @@ python3 src/advantech-coe-model-export.py --task segmentation --size s --format 
 The main `advantech-yolo.py` application offers a complete solution for running YOLOv8 models:
 
 ```bash
-python3 src/advantech-yolo.py [--input SOURCE] [--model MODEL] [--task TASK] [--conf CONF] [--show]
+python3 src/advantech-yolo.py 
 ```
-
+### Results:
+ 
+ #### Object Detection
+![Advantech Logo](data/Detection.gif)
+ #### Instance Segmentation
+![Advantech Logo](data/segmentation.gif)
+ #### Classification
+ ![Advantech Logo](data/classification.gif)
 Parameters:
 - `--input`: Path to video file, image, or camera device ID (0 for primary camera)
 - `--model`: Path to YOLOv8 model file or model name (e.g., 'yolov8n.pt')

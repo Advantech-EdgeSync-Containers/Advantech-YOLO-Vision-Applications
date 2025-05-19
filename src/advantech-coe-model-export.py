@@ -3,8 +3,8 @@
 # ==========================================================================
 # YOLO Export Utility for Advantech Devices
 # ==========================================================================
-# Version:      2.0
-# Author:       Samir Singh <samir.singh@advantech.com>
+# Version:      2.5.0
+# Author:       Samir Singh <samir.singh@advantech.com> and Apoorv Saxena<apoorv.saxena@advantech.com>
 # Created:      January 15, 2025
 # Last Updated: May 17, 2025
 # 
