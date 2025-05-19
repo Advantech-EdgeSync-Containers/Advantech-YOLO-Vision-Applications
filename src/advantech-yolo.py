@@ -2,10 +2,10 @@
 # ==========================================================================
 # Enhanced YOLO Application with Hardware Acceleration
 # ==========================================================================
-# Version:      3.0
-# Author:       Samir Singh <samir.singh@advantech.com>
+# Version:      3.0.0
+# Author:       Samir Singh <samir.singh@advantech.com> and Apoorv Saxena<apoorv.saxena@advantech.com>
 # Created:      March 25, 2025
-# Last Updated: May 16, 2025
+# Last Updated: May 19, 2025
 # 
 # Description:
 #   This application provides hardware-accelerated YOLOv8 inference for

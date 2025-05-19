@@ -6,7 +6,7 @@
 # Version:      2.5.0
 # Author:       Samir Singh <samir.singh@advantech.com> and Apoorv Saxena<apoorv.saxena@advantech.com>
 # Created:      January 15, 2025
-# Last Updated: May 17, 2025
+# Last Updated: May 19, 2025
 # 
 # Description:
 #   This utility enables batch conversion of YOLO models to optimized formats
