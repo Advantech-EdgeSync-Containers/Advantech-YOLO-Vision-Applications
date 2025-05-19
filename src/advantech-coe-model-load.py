@@ -3,7 +3,7 @@
 # ==========================================================================
 # YOLO Model Downloader for Advantech Devices
 # ==========================================================================
-# Version:      1.1.0
+# Version:      2.0
 # Author:       Samir Singh <samir.singh@advantech.com>
 # Created:      February 8, 2025
 # Last Updated: May 15, 2025
