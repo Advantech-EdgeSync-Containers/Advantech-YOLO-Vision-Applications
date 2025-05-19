@@ -1,10 +1,10 @@
-# Advantech-YOLO-Vision-Applications
+# Advantech-YOLO-Vision-Applications Container
 
-A professional toolkit for deploying optimized YOLOv8 vision applications on Advantech edge AI devices with hardware acceleration.
+A professional toolkit for deploying optimized YOLOv8 vision applications container on Advantech edge AI devices with hardware acceleration.
 
 ## Overview
 
-This repository provides a streamlined solution for running YOLOv8 computer vision applications on Advantech edge AI hardware. The toolkit automatically detects your device capabilities and sets up an optimized environment for computer vision tasks with full hardware acceleration support.
+This repository provides a streamlined solution for running YOLOv8 computer vision applications  container on Advantech edge AI hardware. The Container includes toolkit  which automatically detects your device capabilities and sets up an optimized environment for computer vision tasks with full hardware acceleration support.
 
 Designed specifically for Advantech edge AI devices based on NVIDIA Jetson platforms, this toolkit enables rapid deployment of object detection, instance segmentation, and classification applications with minimal configuration required.
 
