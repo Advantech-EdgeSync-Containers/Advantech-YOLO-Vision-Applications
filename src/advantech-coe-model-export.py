@@ -3,10 +3,10 @@
 # ==========================================================================
 # YOLO Export Utility for Advantech Devices
 # ==========================================================================
-# Version:      1.2.0
+# Version:      2.0
 # Author:       Samir Singh <samir.singh@advantech.com>
 # Created:      January 15, 2025
-# Last Updated: May 14, 2025
+# Last Updated: May 17, 2025
 # 
 # Description:
 #   This utility enables batch conversion of YOLO models to optimized formats
