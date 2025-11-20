@@ -50,7 +50,10 @@ chmod +x build.sh
 
 3. The Docker container will launch with all necessary hardware acceleration. You can access the applications as described in the Usage sections below.
 
-## Utility Usage
+
+4. Please refer to the [Acknowledgments](#acknowledgments) section for required package versions and installation commands before proceeding.
+
+5. If you encounterny issues during setup or execution (such as Gstreamer warnings, X11 display problems, Docker Compose errors, or permission issues), please refer to our [Troubleshooting Guide]() for detailed solutions.
 
 ### Model Loading Utility
 
@@ -68,10 +71,10 @@ Parameters:
 Examples:
 ```bash
 # Download a YOLOv8n detection model
-python3 src/advantech-coe-model-load.py 
+python3 src/advantech-coe-model-load.py --task detection --size n
 
 # Download a YOLOv8s segmentation model
-python3 src/advantech-coe-model-load.py 
+python3 src/advantech-coe-model-load.py --task segmentation --size n
 ```
 
 ### Model Export Utility
@@ -89,14 +92,7 @@ Parameters:
 - `device`: Device for optimization (cpu or 0 for GPU)
 - `half`: Enable half precision (FP16) for faster inference
 
-Examples:
-```bash
-# Export YOLOv8n to ONNX format
-python3 src/advantech-coe-model-export.py 
 
-# Export YOLOv8s segmentation model to TensorRT engine with half precision
-python3 src/advantech-coe-model-export.py 
-```
 
 ## Application Usage
 
