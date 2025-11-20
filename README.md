@@ -53,7 +53,7 @@ chmod +x build.sh
 
 4. Please refer to the [Acknowledgments](#acknowledgments) section for required package versions and installation commands before proceeding.
 
-5. If you encounterny issues during setup or execution (such as Gstreamer warnings, X11 display problems, Docker Compose errors, or permission issues), please refer to our [Troubleshooting Guide]() for detailed solutions.
+5. If you encounterny issues during setup or execution (such as Gstreamer warnings, X11 display problems, Docker Compose errors, or permission issues), please refer to our [Troubleshooting Guide](troubleshooting.md) for detailed solutions.
 
 ### Model Loading Utility
 
@@ -242,5 +242,6 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
   pip install ultralytics==8.0.43 --no-deps
   pip install ultralytics-thop==2.0.14 --no-deps
   ```
+
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
