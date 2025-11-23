@@ -1,17 +1,18 @@
 #!/bin/bash
 # ==========================================================================
-# Advantech-YOLO-Vision-Application Docker Compose Build Script
+# Advantech-YOLO11-Vision-Application Docker Compose Build Script
 # ==========================================================================
-# Version:      1.0.3
+# Version:      1.6.0
 # Author:       Samir Singh <samir.singh@advantech.com>
 # Created:      March 10, 2025
-# Last Updated: May 16, 2025
-# 
+# Last Updated: October 9, 2025
+#
 # Description:
-#   This script sets up and launches the Advantech-YOLO-Vision-Application
+#   This script sets up and launches the Advantech-YOLO11-Vision-Application
 #   container environment with proper X11 forwarding for GUI applications.
-#   It automatically creates required directories and configures Docker 
-#   environment for hardware acceleration on Advantech edge AI devices.
+#   It automatically creates required directories and configures Docker
+#   environment for hardware acceleration on Advantech edge AI devices with
+#   JetPack 6.0 support.
 #
 # Terms and Conditions:
 #   1. This software is provided by Advantech Corporation "as is" and any
@@ -53,41 +54,11 @@ echo
 
 sleep 7
 
-mkdir -p src models data diagnostics
+mkdir -p src models data results
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
-
-echo "Checking X environment variables..."
-echo "XAUTHORITY=$XAUTHORITY"
-echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
-
-if [ -z "$XAUTHORITY" ] || [ -z "$XDG_RUNTIME_DIR" ]; then
-    echo "Setting up X11 forwarding..."
-    if [ -z "$XAUTHORITY" ]; then
-        XAUTH_PATH=$(xauth info 2>/dev/null | grep "Authority file" | awk '{print $3}')
-        if [ -n "$XAUTH_PATH" ]; then
-            export XAUTHORITY=$XAUTH_PATH
-            echo "XAUTHORITY set to $XAUTHORITY"
-        fi
-    fi
-    if [ -z "$XDG_RUNTIME_DIR" ]; then
-        export XDG_RUNTIME_DIR=/run/user/$(id -u)
-        echo "XDG_RUNTIME_DIR set to $XDG_RUNTIME_DIR"
-    fi
-    if command_exists xhost; then
-        echo "Configuring xhost access..."
-        xhost +local:docker
-        touch /tmp/.docker.xauth
-        xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -
-        chmod 777 /tmp/.docker.xauth
-    else
-        echo "Warning: xhost command not found. X11 forwarding may not work properly."
-    fi
-else
-    echo "X environment variables already set, skipping X11 setup."
-fi
 
 echo "Starting Docker containers..."
 if command_exists docker-compose; then
@@ -102,4 +73,4 @@ else
 fi
 
 echo "Connecting to container..."
-docker exec -it advantech-yolo-vision bash
+docker exec -it advantech-yolo11-vision bash

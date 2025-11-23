@@ -29,7 +29,7 @@ version: '2.4'
 
 services:
   advantech-yolo-vision:
-    image: edgesync.azurecr.io/advantech/advantech-yolo-vision-applications:1.5.0-Ubuntu20.04-ARM
+    image: edgesync.azurecr.io/advantech/advantech-yolo-vision-applications:1.6.0-Ubuntu22.04-ARM
     container_name: advantech-yolo-vision
     privileged: true
     ipc: host
