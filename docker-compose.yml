@@ -104,4 +104,11 @@ services:
     shm_size: '2gb'
     restart: unless-stopped
     working_dir: /advantech
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu, compute, utility, video, graphics]
+              count: all
 
