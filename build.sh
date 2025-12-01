@@ -1,197 +1,220 @@
 #!/bin/bash
-# Advantech YOLO Vision Applications - Docker Build and Launch Script
-# Version: 2.0.0
-# Author: Samir Singh <samir.singh@advantech.com>
-# Copyright (c) 2024-2025 Advantech Corporation. All rights reserved.
+# ==========================================================================
+# Jetson GPU Passthrough Docker Compose Build Script
+# ==========================================================================
+# Version:      2.1.0
+# Author:       Samir Singh <samir.singh@nvantech.com> and Apoorv Saxena<apoorv.saxena@advantech.com>
+# Created:      January 10, 2025
+# Last Updated: July 11, 2025
+# Description:
+#   This script prepares a Docker environment optimized for GPU and display
+#   passthrough on Advantech edge AI platforms. It:
+#     • Creates standard project directories (src, models, data, diagnostics)
+#     • Configures X11 or Wayland forwarding for GUI applications
+#     • Sets up NVIDIA GPU device access and permissions in containers
+#     • Enables display passthrough for accelerated rendering
+#     • Launches containers with hardware acceleration support
+#
+# Terms and Conditions:
+#   1. Provided by Advantech Corporation "as is," with no express or implied
+#      warranties of merchantability or fitness for a particular purpose.
+#   2. Advantech Corporation shall not be liable for any direct, indirect,
+#      incidental, special, exemplary, or consequential damages arising from
+#      the use of this software.
+#   3. Redistribution and use in source or binary form, with or without
+#      modification, are permitted provided this notice appears in all copies.
+#
+# Copyright (c) 2025 Advantech Corporation. All rights reserved.
+# ==========================================================================
+
 set -euo pipefail
 
-readonly SCRIPT_VERSION="2.0.0"
-readonly SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CONTAINER_NAME="advantech-yolo-vision"
-readonly COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+readonly PROJECT_DIRS=("src" "models" "data")
+readonly XAUTH_FILE="${HOME}/.docker.xauth"  
+readonly COMPOSE_TIMEOUT=60
 readonly RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m'
-readonly BLUE='\033[0;34m' CYAN='\033[0;36m' BOLD='\033[1m' NC='\033[0m'
+readonly BLUE='\033[0;34m' CYAN='\033[0;36m' WHITE='\033[1;37m' NC='\033[0m'
 
-log() { echo -e "${CYAN}[INFO]${NC} $*"; }
-log_success() { echo -e "${GREEN}[SUCCESS]${NC} $*"; }
-log_warning() { echo -e "${YELLOW}[WARNING]${NC} $*"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+log() { echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+log_error() { echo -e "${RED}[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*${NC}" >&2; }
+log_success() { echo -e "${GREEN}[SUCCESS] $(date '+%Y-%m-%d %H:%M:%S') $*${NC}" >&2; }
+log_warning() { echo -e "${YELLOW}[WARN] $(date '+%Y-%m-%d %H:%M:%S') $*${NC}" >&2; }
 
-print_banner() {
+error_handler() {
+    local line_no=$1
+    log_error "Build script failed at line ${line_no}"
+    exit 1
+}
+trap 'error_handler ${LINENO}' ERR
+
+display_banner() {
     clear
     echo -e "${BLUE}"
-    echo "╔══════════════════════════════════════════════════════════════════════════════════════════╗"
-    echo "║     █████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗███████╗ ██████╗██╗  ██╗          ║"
-    echo "║    ██╔══██╗██╔══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██╔════╝██╔════╝██║  ██║          ║"
-    echo "║    ███████║██║  ██║╚██╗ ██╔╝███████║██╔██╗ ██║   ██║   █████╗  ██║     ███████║          ║"
-    echo "║    ██╔══██║██║  ██║ ╚████╔╝ ██╔══██║██║╚██╗██║   ██║   ██╔══╝  ██║     ██╔══██║          ║"
-    echo "║    ██║  ██║██████╔╝  ╚██╔╝  ██║  ██║██║ ╚████║   ██║   ███████╗╚██████╗██║  ██║          ║"
-    echo "║    ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝          ║"
-    echo "║                         YOLO Vision Applications Container                               ║"
-    echo "║                              Center of Excellence                                        ║"
-    echo "║                                Version ${SCRIPT_VERSION}                                         ║"
-    echo "╚══════════════════════════════════════════════════════════════════════════════════════════╝"
-    echo -e "${NC}"
+    cat << 'EOF'
+       █████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗███████╗ ██████╗██╗  ██╗     ██████╗ ██████╗ ███████╗
+      ██╔══██╗██╔══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██╔════╝██╔════╝██║  ██║    ██╔════╝██╔═══██╗██╔════╝
+      ███████║██║  ██║██║   ██║███████║██╔██╗ ██║   ██║   █████╗  ██║     ███████║    ██║     ██║   ██║█████╗  
+      ██╔══██║██║  ██║╚██╗ ██╔╝██╔══██║██║╚██╗██║   ██║   ██╔══╝  ██║     ██╔══██║    ██║     ██║   ██║██╔══╝  
+      ██║  ██║██████╔╝ ╚████╔╝ ██║  ██║██║ ╚████║   ██║   ███████╗╚██████╗██║  ██║    ╚██████╗╚██████╔╝███████╗
+      ╚═╝  ╚═╝╚═════╝   ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚══════╝
+EOF
+    echo -e "${WHITE}                                  Center of Excellence${NC}"
+    echo
+    echo -e "${CYAN}Initializing AI Development Environment...${NC}\n"
+    sleep 2
 }
 
-show_help() {
-    cat << EOF
-${BOLD}Advantech YOLO Vision Applications - Build Script${NC}
-${BOLD}Usage:${NC} $SCRIPT_NAME [options]
-${BOLD}Options:${NC}
-    --no-cache     Force pull latest container image
-    --detach       Run container in background
-    --restart      Restart existing container
-    --stop         Stop running container
-    --logs         Show container logs
-    --status       Show container status
-    --shell        Attach to running container
-    --help         Show this help message
-EOF
-}
+command_exists() { command -v "$1" &>/dev/null; }
 
 check_prerequisites() {
-    log "Checking prerequisites..."
-    command -v docker &>/dev/null || { log_error "Docker is not installed"; exit 1; }
-    if command -v docker-compose &>/dev/null; then
-        COMPOSE_CMD="docker-compose"
-    elif docker compose version &>/dev/null 2>&1; then
-        COMPOSE_CMD="docker compose"
-    else
-        log_error "Docker Compose is not installed"; exit 1
+    log "Verifying prerequisites..."
+    local missing_deps=()
+    if ! command_exists docker; then missing_deps+=("docker"); fi
+    if ! command_exists docker-compose && ! (command_exists docker && docker compose version &>/dev/null); then
+        missing_deps+=("docker-compose")
     fi
-    docker info 2>/dev/null | grep -q "nvidia" || log_warning "NVIDIA runtime not detected"
-    [[ -f "$COMPOSE_FILE" ]] || { log_error "docker-compose.yml not found"; exit 1; }
-    log_success "Prerequisites check passed"
+    if ! command_exists xhost; then log_warning "xhost not found - X11 forwarding may not work properly"; fi
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        log_error "Missing required dependencies: ${missing_deps[*]}"
+        log_error "Please install the missing dependencies and try again"
+        return 1
+    fi
+    if ! docker info &>/dev/null; then log_error "Docker daemon is not running"; return 1; fi
+    if ! docker info 2>/dev/null | grep -q nvidia; then
+        log_warning "NVIDIA Docker runtime not detected - GPU acceleration may not work"
+    fi
+    log_success "Prerequisites verified"
+    return 0
 }
 
-create_directories() {
-    log "Creating directories..."
-    for dir in src models data results diagnostics; do
-        [[ ! -d "${SCRIPT_DIR}/${dir}" ]] && mkdir -p "${SCRIPT_DIR}/${dir}"
+init_project_structure() {
+    log "Checking project directory structure..."
+    for dir in "${PROJECT_DIRS[@]}"; do
+        if [[ ! -d "$dir" ]]; then mkdir -p "$dir"; log "Created directory: $dir"
+        else log "Directory already exists: $dir"; fi
     done
-    log_success "Directories ready"
+    for dir in "${PROJECT_DIRS[@]}"; do
+        if [[ -d "$dir" && -z "$(ls -A "$dir")" ]]; then touch "$dir/.gitkeep"; fi
+    done
+    log_success "Project structure verified"
 }
 
-setup_x11() {
-    log "Setting up X11..."
-    [[ -z "${DISPLAY:-}" ]] && export DISPLAY=:0
+setup_x11_forwarding() {
+    log "Configuring X11 forwarding..."
+    if [[ -n "${SSH_CONNECTION:-}" ]]; then
+        log_warning "SSH session detected - X11 forwarding may require additional configuration"
+    fi
+    local x11_configured=false
+    if [[ -n "${DISPLAY:-}" ]]; then log "DISPLAY=${DISPLAY}"; x11_configured=true
+    else log_warning "DISPLAY variable not set"; fi
     if [[ -z "${XAUTHORITY:-}" ]]; then
-        [[ -f "$HOME/.Xauthority" ]] && export XAUTHORITY="$HOME/.Xauthority"
-    fi
-    if command -v xhost &>/dev/null; then
-        xhost +local:docker 2>/dev/null || true
-        xhost +local:root 2>/dev/null || true
-        if [[ -n "${XAUTHORITY:-}" ]] && [[ -f "$XAUTHORITY" ]]; then
-            touch /tmp/.docker.xauth 2>/dev/null || true
-            xauth nlist "$DISPLAY" 2>/dev/null | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - 2>/dev/null || true
-            chmod 644 /tmp/.docker.xauth 2>/dev/null || true
+        if command_exists xauth; then
+            local xauth_path
+            xauth_path=$(xauth info 2>/dev/null | grep "Authority file" | awk '{print $3}')
+            if [[ -n "$xauth_path" ]]; then export XAUTHORITY="$xauth_path"; log "XAUTHORITY set to: ${XAUTHORITY}"; fi
         fi
+    else log "XAUTHORITY=${XAUTHORITY}"; fi
+    if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
+        export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+        log "XDG_RUNTIME_DIR set to: ${XDG_RUNTIME_DIR}"
     fi
-    export DISPLAY XAUTHORITY="${XAUTHORITY:-/tmp/.docker.xauth}"
-    log_success "X11 ready"
+    if command_exists xhost && [[ "$x11_configured" == "true" ]]; then
+        log "Configuring xhost access..."
+        xhost +local:docker &>/dev/null || log_warning "Failed to configure xhost"
+        log "Creating X authentication file..."
+        rm -f "${XAUTH_FILE}" 2>/dev/null || true
+        touch "${XAUTH_FILE}"
+        if command_exists xauth; then
+            xauth nlist "${DISPLAY}" 2>/dev/null | sed -e 's/^..../ffff/' | \
+                xauth -f "${XAUTH_FILE}" nmerge - &>/dev/null || \
+                log_warning "Failed to merge X authentication data"
+        fi
+        chmod 666 "${XAUTH_FILE}" 2>/dev/null || true
+    else log_warning "X11 forwarding not configured - GUI applications may not work"; fi
+    log_success "X11 configuration completed"
 }
 
-is_container_running() { docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; }
-is_container_exists() { docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; }
-
-stop_container() {
-    log "Stopping container..."
-    is_container_running && $COMPOSE_CMD -f "$COMPOSE_FILE" down && log_success "Stopped" || log "Not running"
-}
-
-start_container() {
-    local detach="${1:-false}"
-    log "Starting container..."
-    [[ "${NO_CACHE:-false}" == "true" ]] && $COMPOSE_CMD -f "$COMPOSE_FILE" pull
-    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d
+start_containers() {
+    log "Starting Docker containers..."
+    if [[ ! -f "${SCRIPT_DIR}/docker-compose.yml" ]]; then
+        log_error "docker-compose.yml not found in ${SCRIPT_DIR}"
+        return 1
+    fi
+    local compose_cmd
+    if command_exists docker-compose; then compose_cmd="docker-compose"
+    elif command_exists docker && docker compose version &>/dev/null; then compose_cmd="docker compose"
+    else log_error "No valid Docker Compose command found"; return 1; fi
+    if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        log "Stopping existing container..."
+        ${compose_cmd} down --timeout "${COMPOSE_TIMEOUT}" || true
+    fi
+    log "Starting container with ${compose_cmd}..."
+    if ! ${compose_cmd} up -d --timeout "${COMPOSE_TIMEOUT}"; then
+        log_error "Failed to start containers"
+        ${compose_cmd} logs --tail=50
+        return 1
+    fi
+    log "Waiting for container to be ready..."
     local retries=30
     while [[ $retries -gt 0 ]]; do
-        is_container_running && break
-        sleep 1; ((retries--))
+        if docker exec "${CONTAINER_NAME}" echo "ready" &>/dev/null; then
+            log_success "Container is ready"
+            return 0
+        fi
+        sleep 1
+        ((retries--))
     done
-    [[ $retries -eq 0 ]] && { log_error "Failed to start"; docker logs "$CONTAINER_NAME" 2>&1 | tail -20; exit 1; }
-    log_success "Container started"
-    if [[ "$detach" == "false" ]]; then
-        log "Waiting for initialization..."
-        local elapsed=0
-        while [[ $elapsed -lt 120 ]]; do
-            docker exec "$CONTAINER_NAME" test -f /tmp/.advantech_initialized 2>/dev/null && break
-            echo -n "."; sleep 2; ((elapsed+=2))
-        done
-        echo ""
-        log_success "Ready"
-        echo -e "${YELLOW}Environment initialized. Type 'exit' to leave container.${NC}"
-        docker exec -it "$CONTAINER_NAME" bash
+    log_error "Container failed to become ready"
+    return 1
+}
+
+run_post_start_scripts() {
+    log "Running post-start initialization..."
+    local onnx_script="/advantech/init.sh"
+    if docker exec "${CONTAINER_NAME}" test -f "$onnx_script" 2>/dev/null; then
+        log "Found Initialization script inside container"
+        log "Installing ONNX Runtime GPU..."
+        if docker exec -it "${CONTAINER_NAME}" bash -c "$onnx_script --force"; then
+            log_success "ONNX Runtime GPU installation completed"
+        else
+            log_warning "ONNX Runtime GPU installation failed - continuing anyway"
+        fi
     else
-        log_success "Running in background"
-        echo "Attach: docker exec -it ${CONTAINER_NAME} bash"
+        log_warning "ONNX Runtime GPU installation script not found inside container"
+        log_warning "To install later, run inside container: ./init.sh --force"
     fi
 }
 
-restart_container() { stop_container; sleep 2; start_container "${1:-false}"; }
-show_logs() { docker logs -f "$CONTAINER_NAME"; }
-show_status() {
-    echo -e "${BOLD}Container Status:${NC}"
-    is_container_exists && docker ps -a --filter "name=${CONTAINER_NAME}" --format "table {{.Names}}\t{{.Status}}" || echo -e "${RED}Not found${NC}"
+connect_to_container() {
+    log "Connecting to container..."
+    echo
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║           Container Successfully Started!                      ║${NC}"
+    echo -e "${GREEN}╠════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}║  Container: ${CONTAINER_NAME}                                  ║${NC}"
+    echo -e "${GREEN}║  GPU Support: Enabled                                          ║${NC}"
+    echo -e "${GREEN}║  Working Directory: /advantech                                 ║${NC}"
+    echo -e "${GREEN}║  Mounted Volumes:                                              ║${NC}"
+    echo -e "${GREEN}║    ./src → /app/src                                            ║${NC}"
+    echo -e "${GREEN}║    ./models → /app/models                                      ║${NC}"
+    echo -e "${GREEN}║    ./data → /app/data                                          ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo
+    exec docker exec -it "${CONTAINER_NAME}" bash
 }
-attach_shell() { is_container_running && docker exec -it "$CONTAINER_NAME" bash || { log_error "Not running"; exit 1; }; }
 
 main() {
-    local action="start" detach=false
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --no-cache) NO_CACHE=true; shift;;
-            --detach|-d) detach=true; shift;;
-            --restart) action="restart"; shift;;
-            --stop) action="stop"; shift;;
-            --logs) action="logs"; shift;;
-            --status) action="status"; shift;;
-            --shell) action="shell"; shift;;
-            --help|-h) show_help; exit 0;;
-            *) log_error "Unknown: $1"; show_help; exit 1;;
-        esac
-    done
-    [[ "$action" != "logs" ]] && [[ "$action" != "status" ]] && print_banner
-    cd "$SCRIPT_DIR"
-    case $action in
-        start)
-            check_prerequisites
-            create_directories
-            setup_x11
-            if is_container_running; then
-                log "Already running"
-                read -p "Restart? (y/N): " -n 1 -r
-                echo ""
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    restart_container "$detach"
-                else
-                    attach_shell
-                fi
-            else
-                start_container "$detach"
-            fi
-            ;;
-        restart)
-            check_prerequisites
-            create_directories
-            setup_x11
-            restart_container "$detach"
-            ;;
-        stop)
-            stop_container
-            ;;
-        logs)
-            show_logs
-            ;;
-        status)
-            show_status
-            ;;
-        shell)
-            attach_shell
-            ;;
-    esac
+    display_banner
+    cd "${SCRIPT_DIR}"
+    check_prerequisites || exit 1
+    init_project_structure
+    setup_x11_forwarding
+    start_containers || exit 1
+    run_post_start_scripts
+    connect_to_container
 }
 
 main "$@"
