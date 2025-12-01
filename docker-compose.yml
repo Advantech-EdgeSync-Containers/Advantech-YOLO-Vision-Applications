@@ -37,11 +37,8 @@ version: '2.4'
 
 services:
   advantech-yolo-vision:
-    # Container image - ARM64 for Jetson devices
     image: edgesync.azurecr.io/advantech/advantech-yolo-vision-applications:1.5.0-Ubuntu20.04-ARM
     container_name: advantech-yolo-vision
-
-    # Security settings
     privileged: true
     ipc: host
     network_mode: host
@@ -49,7 +46,7 @@ services:
     security_opt:
       - seccomp:unconfined
     tty: true
-    stdin_open: true
+    stdin_open: true  
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
@@ -59,16 +56,25 @@ services:
           echo "════════════════════════════════════════════════════════════════"
           if [ -f /advantech/init.sh ]; then
             chmod +x /advantech/init.sh
-            /advantech/init.sh --quiet || echo "Warning: init.sh completed with errors"
+            /advantech/init.sh --force
+            if [ $? -eq 0 ]; then
+              touch /tmp/.advantech_initialized
+              echo "════════════════════════════════════════════════════════════════"
+              echo "  Initialization complete! Container is ready."
+              echo "════════════════════════════════════════════════════════════════"
+            else
+              echo "════════════════════════════════════════════════════════════════"
+              echo "  WARNING: init.sh failed. Run manually: ./init.sh --force"
+              echo "════════════════════════════════════════════════════════════════"
+            fi
+          else
+            echo "WARNING: init.sh not found at /advantech/init.sh"
           fi
-          touch /tmp/.advantech_initialized
-          echo "════════════════════════════════════════════════════════════════"
-          echo "  Initialization complete! Container is ready."
-          echo "════════════════════════════════════════════════════════════════"
         else
           echo "Environment already initialized. Skipping init.sh"
         fi
         exec /bin/bash
+
     labels:
       maintainer: "Samir Singh <samir.singh@advantech.com>"
       vendor: "Advantech Corporation"
@@ -105,9 +111,7 @@ services:
       - __GLX_VENDOR_LIBRARY_NAME=nvidia
       - __GL_SYNC_TO_VBLANK=0
       - XMODIFIERS=@im=none
-      # Library paths
       - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu:/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
-      # Python settings
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
     volumes:
@@ -116,6 +120,7 @@ services:
       - ./models:/advantech/models:rw
       - ./data:/advantech/data:rw
       - ./results:/advantech/results:rw
+      - ./diagnostics:/advantech/diagnostics:rw
       # Init script
       - ./init.sh:/advantech/init.sh:ro
       - ./wise-bench.sh:/advantech/wise-bench.sh:ro
@@ -126,7 +131,6 @@ services:
       # Device access
       - /dev:/dev:rw
       - /sys:/sys:rw
-      # NVIDIA/Jetson system files (read-only)
       - /etc/nv_tegra_release:/etc/nv_tegra_release:ro
       - /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra:ro
       - /usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:ro
@@ -134,7 +138,6 @@ services:
       - /usr/src/jetson_multimedia_api:/usr/src/jetson_multimedia_api:ro
       - /usr/share/glvnd/egl_vendor.d/:/usr/share/glvnd/egl_vendor.d/:ro
       - /etc/glvnd/egl_vendor.d/:/etc/glvnd/egl_vendor.d/:ro
-    # Device access - NVIDIA and camera devices
     devices:
       # NVIDIA core devices
       - /dev/nvhost-ctrl
@@ -173,17 +176,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
 # ==========================================================================
 # Notes:
 # ==========================================================================
 # 1. Run ./init.sh inside the container after first start to install
 #    ONNX Runtime GPU and other dependencies.
+#
 # 2. For X11 display, run on host before starting container:
 #    xhost +local:docker
+#
 # 3. To check available cameras:
 #    v4l2-ctl --list-devices
+#
 # 4. To access container shell:
 #    docker exec -it advantech-yolo-vision bash
+#
 # 5. For CSI cameras, use nvarguscamerasrc:
 #    gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! nvvidconv ! xvimagesink
 # ==========================================================================
