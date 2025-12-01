@@ -27,1000 +27,1055 @@
 #
 # Copyright (c) 2025 Advantech Corporation. All rights reserved.
 # ==========================================================================
-
-import sys
-import os
-import time
-import shutil
-import signal
-import subprocess
-import gc
+__title__="Advantech YOLO Inference Pipeline"
+__author__="Samir Singh"
+__copyright__="Copyright (c) 2024-2025 Advantech Corporation. All Rights Reserved."
+__license__="Proprietary - Advantech Corporation"
+__version__="2.0.1"
+__build_date__="2025-01-15"
+__maintainer__="Samir Singh"
+import os,sys,time,signal,hashlib,threading,glob,subprocess,select
 from pathlib import Path
-
-print("== Setting up system module paths ==")
-system_paths = [
-    '/usr/lib/python3/dist-packages',
-    '/usr/local/lib/python3.8/dist-packages'
-]
-
-for path in system_paths:
-    if os.path.exists(path) and path not in sys.path:
-        sys.path.insert(0, path)
-        print(f"Added {path} to sys.path")
-
-try:
-    import six
-    print(f"Found six module: version {six.__version__} at {six.__file__}")
-except ImportError:
-    print("❌ Cannot find six module despite adding system paths!")
-    sys.exit(1)
-
-def fix_numpy_path():
-    print("== Fixing NumPy paths and compatibility issues ==")
-    
-    dist_packages = '/usr/local/lib/python3.8/dist-packages'
-    if os.path.exists(dist_packages):
-        if dist_packages in sys.path:
-            sys.path.remove(dist_packages)
-        sys.path.insert(0, dist_packages)
-        print(f"Added dist-packages to beginning of path: {dist_packages}")
-    
-    if 'numpy' in sys.modules:
-        print("NumPy already imported, forcing reload")
-        del sys.modules['numpy']
-        if 'numpy.random' in sys.modules:
-            del sys.modules['numpy.random']
-    
-    try:
-        import numpy as np
-        print(f"Using NumPy {np.__version__} from {np.__file__}")
-        
-        patched = False
-        if not hasattr(np.random, 'BitGenerator'):
-            print("❌ NumPy is missing BitGenerator attribute.")
-            print("Adding BitGenerator mock...")
-            
-            class DummyBitGenerator:
-                def __init__(self, seed=None):
-                    self.seed = seed
-            
-            np.random.BitGenerator = DummyBitGenerator
-            print("Added dummy BitGenerator to numpy.random")
-            patched = True
-        
-        if not hasattr(np.random, 'mtrand'):
-            print("❌ NumPy is missing mtrand attribute.")
-            print("Adding mtrand mock...")
-            
-            class DummyRand:
-                def __init__(self):
+from typing import Optional,Dict,Any,List,Tuple,Union
+import numpy as np
+from advantech_core import (TORCH_AVAILABLE,TRT_AVAILABLE,PYCUDA_AVAILABLE,ONNX_AVAILABLE,GST_AVAILABLE,FLASK_AVAILABLE,cv2,torch,trt,cuda,ort,Gst,GstApp,GLib,Flask,jsonify,init_pycuda,COCO_CLASSES,IMAGENET_CLASSES,get_class_name,get_class_color,get_class_names,MAX_MEMORY_MB,AdvantechTaskType,AdvantechModelFormat,AdvantechInputSource,AdvantechPrecision,AdvantechDropPolicy,AdvantechCameraFormat,AdvantechCameraInfo,AdvantechConfig,AdvantechMetrics,AdvantechDetection,AdvantechClassification,AdvantechFrame,AdvantechMemoryManager,AdvantechLogger,AdvantechMetricsCollector,AdvantechRingBuffer,AdvantechEngine)
+class AdvantechModelLoader:
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger):
+        self.config=config
+        self.logger=logger
+        Path(self.config.trt_cache_path).mkdir(parents=True,exist_ok=True)
+        self._memory_manager=AdvantechMemoryManager()
+    def detect_format(self,model_path:str)->AdvantechModelFormat:
+        suffix=Path(model_path).suffix.lower()
+        if suffix in [".pt",".pth"]:
+            return AdvantechModelFormat.PYTORCH
+        elif suffix==".onnx":
+            return AdvantechModelFormat.ONNX
+        elif suffix in [".trt",".engine",".plan"]:
+            return AdvantechModelFormat.TENSORRT
+        raise ValueError(f"Unsupported model format: {suffix}")
+    def _compute_model_hash(self,model_path:str)->str:
+        hasher=hashlib.md5()
+        with open(model_path,'rb') as f:
+            for chunk in iter(lambda:f.read(65536),b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()[:12]
+    def _get_compute_capability(self)->str:
+        if TORCH_AVAILABLE and torch.cuda.is_available():
+            major,minor=torch.cuda.get_device_capability(self.config.gpu_device)
+            return f"{major}{minor}"
+        return "87"
+    def _get_engine_path(self,model_path:str)->str:
+        model_hash=self._compute_model_hash(model_path)
+        cc=self._get_compute_capability()
+        model_name=Path(model_path).stem
+        return str(Path(self.config.trt_cache_path)/f"{model_name}_{model_hash}_{self.config.precision.value}_sm{cc}.engine")
+    def _detect_task_from_filename(self,model_path:str)->Optional[AdvantechTaskType]:
+        model_name=Path(model_path).stem.lower()
+        if '-seg' in model_name or '_seg' in model_name or model_name.endswith('seg'):
+            return AdvantechTaskType.SEGMENTATION
+        elif '-cls' in model_name or '_cls' in model_name or model_name.endswith('cls'):
+            return AdvantechTaskType.CLASSIFICATION
+        return None
+    def load(self,model_path:str,model_format:Optional[AdvantechModelFormat]=None)->"AdvantechEngine":
+        if not Path(model_path).exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+        if model_format is None:
+            model_format=self.detect_format(model_path)
+        detected_task=self._detect_task_from_filename(model_path)
+        if detected_task and self.config.task_type==AdvantechTaskType.DETECTION:
+            self.config.task_type=detected_task
+        self._memory_manager.force_cleanup()
+        if model_format==AdvantechModelFormat.TENSORRT:
+            return self._load_as_tensorrt(model_path)
+        elif model_format==AdvantechModelFormat.ONNX:
+            return self._load_as_onnx(model_path)
+        elif model_format==AdvantechModelFormat.PYTORCH:
+            return self._load_as_pytorch(model_path)
+        raise RuntimeError(f"Failed to load model: {model_path}")
+    def _load_as_tensorrt(self,model_path:str)->"AdvantechEngine":
+        source_format=self.detect_format(model_path)
+        if source_format==AdvantechModelFormat.TENSORRT:
+            return AdvantechTensorRTEngine(self.config,self.logger,model_path)
+        elif source_format==AdvantechModelFormat.ONNX:
+            if not TRT_AVAILABLE:
+                raise RuntimeError("TensorRT not available")
+            engine_path=self._get_engine_path(model_path)
+            if Path(engine_path).exists():
+                try:
+                    return AdvantechTensorRTEngine(self.config,self.logger,engine_path)
+                except:
                     pass
-                
-                def __call__(self, *args, **kwargs):
-                    return np.random.random(*args, **kwargs)
-            
-            class DummyMtrand:
-                def __init__(self):
-                    self._rand = DummyRand()
-            
-            np.random.mtrand = DummyMtrand()
-            print("Added dummy mtrand to numpy.random")
-            patched = True
-        
-        if patched:
-            has_bitgen = hasattr(np.random, 'BitGenerator')
-            has_mtrand = hasattr(np.random, 'mtrand')
-            print(f"NumPy patched: BitGenerator={has_bitgen}, mtrand={has_mtrand}")
-            return True
-        else:
-            print("✅ NumPy has all required attributes, no patching needed")
-            return True
-            
-    except ImportError as e:
-        print(f"❌ Error importing NumPy: {e}")
-        return False
-
-def test_hardware_acceleration():
-    print("== Testing hardware acceleration capabilities ==")
-    
-    try:
-        result = subprocess.run(
-            ['v4l2-ctl', '--list-devices'],
-            capture_output=True, text=True, check=False
-        )
-        if result.returncode == 0:
-            print("V4L2 devices found:")
-            print(result.stdout.strip())
-            v4l2_available = True
-        else:
-            print("V4L2 devices not found or v4l2-ctl not available")
-            v4l2_available = False
-    except Exception as e:
-        print(f"Error checking V4L2: {e}")
-        v4l2_available = False
-    
-    try:
-        result = subprocess.run(
-            ['gst-inspect-1.0', 'nvv4l2decoder'],
-            capture_output=True, text=True, check=False
-        )
-        if "Plugin Details" in result.stdout:
-            print("✅ NVIDIA hardware decoder (nvv4l2decoder) is available")
-            nvdec_available = True
-        else:
-            print("NVIDIA hardware decoder not found")
-            nvdec_available = False
-            
-        result = subprocess.run(
-            ['gst-inspect-1.0', 'nvv4l2h264enc'],
-            capture_output=True, text=True, check=False
-        )
-        if "Plugin Details" in result.stdout:
-            print("✅ NVIDIA hardware encoder (nvv4l2h264enc) is available")
-            nvenc_available = True
-        else:
-            print("NVIDIA hardware encoder not found")
-            nvenc_available = False
-    except Exception as e:
-        print(f"Error checking NVIDIA codecs: {e}")
-        nvdec_available = False
-        nvenc_available = False
-    
-    ffmpeg_hwaccels = []
-    try:
-        result = subprocess.run(
-            ['ffmpeg', '-hwaccels'],
-            capture_output=True, text=True, check=False
-        )
-        if result.returncode == 0:
-            hwaccels = [line.strip() for line in result.stdout.split('\n') if line.strip() and "Hardware acceleration methods:" not in line]
-            if hwaccels:
-                print("FFmpeg hardware acceleration available:")
-                for hwaccel in hwaccels:
-                    print(f" - {hwaccel}")
-                ffmpeg_hwaccel = True
-                ffmpeg_hwaccels = hwaccels
-            else:
-                print("No FFmpeg hardware acceleration found")
-                ffmpeg_hwaccel = False
-        else:
-            print("Error checking FFmpeg hardware acceleration")
-            ffmpeg_hwaccel = False
-    except Exception as e:
-        print(f"Error checking FFmpeg: {e}")
-        ffmpeg_hwaccel = False
-        
-    return {
-        "v4l2": v4l2_available,
-        "nvdec": nvdec_available,
-        "nvenc": nvenc_available,
-        "ffmpeg_hwaccel": ffmpeg_hwaccel,
-        "ffmpeg_hwaccels": ffmpeg_hwaccels
-    }
-
-def setup_environment():
-    print("== Setting up environment ==")
-    
-    for root, dirs, files in os.walk('.'):
-        for d in dirs:
-            if d == '__pycache__':
-                cache_dir = os.path.join(root, d)
-                print(f"Removing cache directory: {cache_dir}")
-                shutil.rmtree(cache_dir)
-    
-    cv2_paths = [p for p in sys.path if 'cv2' in p]
-    for p in cv2_paths:
-        if p in sys.path:
-            sys.path.remove(p)
-            print(f"Removed potentially conflicting CV2 path: {p}")
-    
-    if not fix_numpy_path():
-        print("❌ Failed to fix NumPy path. Cannot continue.")
-        return False
-    
-    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64'
-    os.environ['CUDA_CACHE_DISABLE'] = '0'
-    os.environ['LD_LIBRARY_PATH'] = '/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu:' + os.environ.get('LD_LIBRARY_PATH', '')
-    
-    if 'DISPLAY' not in os.environ:
-        os.environ['DISPLAY'] = ':0'
-    
-    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-    os.environ['XDG_RUNTIME_DIR'] = '/tmp'
-    os.environ['PYTHONPATH'] = '/usr/lib/python3/dist-packages:' + os.environ.get('PYTHONPATH', '')
-    
-    print("\nFinal Python path:")
-    for p in sys.path:
-        print(f"  {p}")
-    
-    try:
-        import torch
-        if not hasattr(torch.distributed, 'is_initialized'):
-            torch.distributed.is_initialized = lambda: False
-            print("Patched torch.distributed.is_initialized")
-        
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.enabled = True
-    except ImportError:
-        print("Warning: Could not import torch")
-    
-    hw_accel = test_hardware_acceleration()
-    
-    print("✅ Environment setup complete")
-    return hw_accel
-
-def signal_handler(sig, frame):
-    print("\nReceived interrupt. Cleaning up and exiting...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-
-def preprocess_video(input_file, output_file, scale=None, fps=None, hw_accel=None):
-    print(f"Pre-processing video: {input_file} -> {output_file}")
-    gst_cmd = ['gst-launch-1.0']
-    gst_cmd.extend([f'filesrc location={input_file}', '!', 'decodebin', '!', 'nvvidconv'])
-    if scale: width, height = scale; gst_cmd.append(f'! video/x-raw,width={width},height={height}')
-    if fps: gst_cmd.append(f'! videorate ! video/x-raw,framerate={fps}/1')
-    gst_cmd.extend(['!', 'nvv4l2h264enc', '!', 'h264parse', '!', 'qtmux', '!', f'filesink location={output_file}'])
-    gst_command = " ".join(gst_cmd)
-    print(f"Running GStreamer command: {gst_command}")
-    try:
-        process = subprocess.run(gst_command, shell=True, capture_output=True, text=True, check=False)
-        if process.returncode == 0: print("✅ GStreamer video preprocessing complete"); return True
-        else: print(f"❌ GStreamer preprocessing failed: {process.stderr}"); return False
-    except Exception as e:
-        print(f"❌ Error during preprocessing: {e}")
-        return False
-
-def create_video_from_frames(frame_dir, output_file, fps=30, hw_accel=None):
-    print(f"Creating video from frames in {frame_dir} -> {output_file}")
-    if not os.path.exists(frame_dir): print(f"❌ Frames directory not found: {frame_dir}"); return False
-    frames = sorted(list(Path(frame_dir).glob("*.jpg")))
-    if not frames: print(f"❌ No frames found in {frame_dir}"); return False
-    num_frames = len(frames)
-    print(f"Found {num_frames} frames to process")
-    
-    # Get first frame dimensions
-    try:
-        import cv2
-        first_frame = cv2.imread(str(frames[0]))
-        if first_frame is None:
-            print(f"❌ Could not read first frame: {frames[0]}")
-            height, width = 720, 1280  # Default fallback dimensions
-        else:
-            height, width = first_frame.shape[:2]
-            print(f"Frame dimensions: {width}x{height}")
-    except Exception as e:
-        print(f"❌ Error getting frame dimensions: {e}")
-        height, width = 720, 1280  # Default fallback dimensions
-    
-    temp_dir = os.path.join(frame_dir, "temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    for i, frame in enumerate(frames): shutil.copy(frame, os.path.join(temp_dir, f"img_{i:06d}.jpg"))
-    frame_pattern = f"{temp_dir}/img_%06d.jpg"
-    
-    # Convert fps to a proper fraction for GStreamer
-    from fractions import Fraction
-    fps_fraction = Fraction(fps).limit_denominator(100)
-    gst_fps = f"{fps_fraction.numerator}/{fps_fraction.denominator}"
-    print(f"Using framerate: {fps} → {gst_fps}")
-    
-    # GStreamer pipeline with full caps specification (including width and height)
-    gst_cmd = [
-        'gst-launch-1.0',
-        'multifilesrc',
-        f'location={frame_pattern}',
-        'index=0',
-        '!',
-        f'image/jpeg,framerate={gst_fps},width={width},height={height}',
-        '!',
-        'jpegdec',
-        '!',
-        'videoconvert',
-        '!',
-        'nvvidconv',
-        '!',
-        'nvv4l2h264enc',
-        '!',
-        'h264parse',
-        '!',
-        'qtmux',
-        '!',
-        f'filesink location={output_file}'
-    ]
-    gst_command = " ".join(gst_cmd)
-    
-    print(f"Running GStreamer command: {gst_command}")
-    try:
-        process = subprocess.run(gst_command, shell=True, capture_output=True, text=True, check=False)
-        success = process.returncode == 0
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        if success: print("✅ GStreamer video creation complete"); return True
-        else:
-            print(f"❌ GStreamer video creation failed: {process.stderr}")
-            original_frame_pattern = f"{frame_dir}/frame_%06d.jpg"
-            
-            # Alternative approach with complete caps filter
-            alt_cmd = [
-                'gst-launch-1.0',
-                'multifilesrc',
-                f'location={original_frame_pattern}',
-                'index=1',
-                '!',
-                f'image/jpeg,framerate={gst_fps},width={width},height={height}',
-                '!',
-                'jpegdec',
-                '!',
-                'videoconvert',
-                '!',
-                'nvvidconv',
-                '!',
-                'nvv4l2h264enc',
-                '!',
-                'h264parse',
-                '!',
-                'qtmux',
-                '!',
-                f'filesink location={output_file}'
-            ]
-            alt_command = " ".join(alt_cmd)
-            
-            print(f"Trying alternative GStreamer approach: {alt_command}")
-            alt_process = subprocess.run(alt_command, shell=True, capture_output=True, text=True, check=False)
-            if alt_process.returncode == 0: print("✅ Alternative GStreamer approach successful"); return True
-            else:
-                print(f"❌ All GStreamer approaches failed, trying fallback method with ffmpeg")
-                ffmpeg_command = (f'ffmpeg -y -framerate {fps} -i "{frame_dir}/frame_%06d.jpg" -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p "{output_file}"')
-                print(f"Running ffmpeg fallback: {ffmpeg_command}")
-                ffmpeg_process = subprocess.run(ffmpeg_command, shell=True, capture_output=True, text=True, check=False)
-                if ffmpeg_process.returncode == 0: print("✅ Fallback ffmpeg approach successful"); return True
-                else: print(f"❌ All approaches failed to create video from frames"); return False
-    except Exception as e:
-        print(f"❌ Error during video creation: {e}")
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        return False
-
-class YOLOHWAccelerated:
-    def __init__(self, hw_acceleration=None):
-        print("\n== Initializing YOLO with Hardware Acceleration ==")
-        self.hw_accel = hw_acceleration or {}
-        
+            return self._convert_onnx_to_trt(model_path,engine_path)
+        elif source_format==AdvantechModelFormat.PYTORCH:
+            onnx_path=self._convert_pt_to_onnx(model_path)
+            engine_path=self._get_engine_path(onnx_path)
+            return self._convert_onnx_to_trt(onnx_path,engine_path)
+        raise RuntimeError("Cannot convert to TensorRT")
+    def _load_as_onnx(self,model_path:str)->"AdvantechEngine":
+        source_format=self.detect_format(model_path)
+        if source_format==AdvantechModelFormat.ONNX:
+            if not ONNX_AVAILABLE:
+                raise RuntimeError("ONNX Runtime not available")
+            return AdvantechOnnxEngine(self.config,self.logger,model_path)
+        elif source_format==AdvantechModelFormat.PYTORCH:
+            onnx_path=self._convert_pt_to_onnx(model_path)
+            return AdvantechOnnxEngine(self.config,self.logger,onnx_path)
+        raise RuntimeError("Cannot run as ONNX")
+    def _load_as_pytorch(self,model_path:str)->"AdvantechEngine":
+        source_format=self.detect_format(model_path)
+        if source_format==AdvantechModelFormat.PYTORCH:
+            if not TORCH_AVAILABLE:
+                raise RuntimeError("PyTorch not available")
+            return AdvantechPyTorchEngine(self.config,self.logger,model_path)
+        raise RuntimeError("Cannot run as PyTorch")
+    def _convert_pt_to_onnx(self,pt_path:str)->str:
+        if not TORCH_AVAILABLE:
+            raise RuntimeError("PyTorch not available")
+        onnx_path=str(Path(self.config.trt_cache_path)/f"{Path(pt_path).stem}.onnx")
+        if Path(onnx_path).exists():
+            return onnx_path
         try:
-            import numpy as np
-            self.np = np
-            print(f"Using NumPy {np.__version__}")
-            
-            import torch
-            self.torch = torch
-            
-            torch.backends.cudnn.benchmark = True
-            torch.backends.cudnn.enabled = True
-            
-            print(f"Using PyTorch {torch.__version__}")
-            print(f"CUDA available: {torch.cuda.is_available()}")
-            if torch.cuda.is_available():
-                print(f"CUDA device: {torch.cuda.get_device_name(0)}")
-                print(f"CUDA memory allocated: {torch.cuda.memory_allocated(0) / 1024 / 1024:.2f} MB")
-                print(f"CUDA memory reserved: {torch.cuda.memory_reserved(0) / 1024 / 1024:.2f} MB")
-            
-            try:
-                old_path = sys.path.copy()
-                sys.path = ['/usr/lib/python3.8', '/usr/local/lib/python3.8/dist-packages']
-                
-                import cv2
-                self.cv2 = cv2
-                print(f"Using OpenCV {cv2.__version__}")
-                
-                if hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0:
-                    print(f"✅ OpenCV CUDA acceleration available: {cv2.cuda.getCudaEnabledDeviceCount()} devices")
-                    self.opencv_cuda = True
-                else:
-                    print("OpenCV CUDA acceleration not available")
-                    self.opencv_cuda = False
-                
+            from ultralytics import YOLO
+            model=YOLO(pt_path)
+            imgsz=224 if self.config.task_type==AdvantechTaskType.CLASSIFICATION else self.config.input_width
+            model.export(format="onnx",imgsz=imgsz,opset=12,simplify=True)
+            exported_path=str(Path(pt_path).with_suffix('.onnx'))
+            if Path(exported_path).exists():
+                import shutil
+                shutil.move(exported_path,onnx_path)
+            return onnx_path
+        except ImportError:
+            raise RuntimeError("Ultralytics required for .pt to .onnx conversion")
+    def _convert_onnx_to_trt(self,onnx_path:str,engine_path:str)->"AdvantechEngine":
+        if not TRT_AVAILABLE:
+            return AdvantechOnnxEngine(self.config,self.logger,onnx_path)
+        trt_logger=trt.Logger(trt.Logger.WARNING)
+        builder=trt.Builder(trt_logger)
+        network=builder.create_network(1<<int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+        parser=trt.OnnxParser(network,trt_logger)
+        with open(onnx_path,'rb') as f:
+            if not parser.parse(f.read()):
+                for i in range(parser.num_errors):
+                    self.logger.error(f"ONNX parse error: {parser.get_error(i)}","ModelLoader")
+                raise RuntimeError("Failed to parse ONNX model")
+        config=builder.create_builder_config()
+        config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE,512<<20)
+        if self.config.precision==AdvantechPrecision.FP16 and builder.platform_has_fast_fp16:
+            config.set_flag(trt.BuilderFlag.FP16)
+        elif self.config.precision==AdvantechPrecision.INT8 and builder.platform_has_fast_int8:
+            config.set_flag(trt.BuilderFlag.INT8)
+        input_tensor=network.get_input(0)
+        input_shape=input_tensor.shape
+        if -1 in input_shape:
+            profile=builder.create_optimization_profile()
+            h=224 if self.config.task_type==AdvantechTaskType.CLASSIFICATION else self.config.input_height
+            w=224 if self.config.task_type==AdvantechTaskType.CLASSIFICATION else self.config.input_width
+            profile.set_shape(input_tensor.name,(1,3,h,w),(1,3,h,w),(1,3,h,w))
+            config.add_optimization_profile(profile)
+        serialized_engine=builder.build_serialized_network(network,config)
+        if serialized_engine is None:
+            raise RuntimeError("Failed to build TensorRT engine")
+        with open(engine_path,'wb') as f:
+            f.write(serialized_engine)
+        del serialized_engine,network,parser,builder
+        self._memory_manager.force_cleanup()
+        return AdvantechTensorRTEngine(self.config,self.logger,engine_path)
+class AdvantechTensorRTEngine(AdvantechEngine):
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,engine_path:str):
+        super().__init__(config,logger)
+        self.engine_path=engine_path
+        self._stream=None
+        self._context=None
+        self._engine=None
+        self._inputs=[]
+        self._outputs=[]
+        self._load_engine()
+    def _load_engine(self):
+        trt_logger=trt.Logger(trt.Logger.WARNING)
+        runtime=trt.Runtime(trt_logger)
+        with open(self.engine_path,'rb') as f:
+            self._engine=runtime.deserialize_cuda_engine(f.read())
+        if self._engine is None:
+            raise RuntimeError(f"Failed to load TensorRT engine: {self.engine_path}")
+        self._context=self._engine.create_execution_context()
+        if init_pycuda() and cuda is not None:
+            self._stream=cuda.Stream()
+        for i in range(self._engine.num_io_tensors):
+            name=self._engine.get_tensor_name(i)
+            dtype=trt.nptype(self._engine.get_tensor_dtype(name))
+            shape=self._engine.get_tensor_shape(name)
+            size=abs(trt.volume(shape))
+            host_mem=self._memory_manager.allocate_pinned_buffer((size,),dtype)
+            if host_mem is None:
+                host_mem=np.empty(size,dtype=dtype)
+            device_mem=None
+            if PYCUDA_AVAILABLE and cuda is not None:
                 try:
-                    test_window_name = "TestWindow"
-                    cv2.namedWindow(test_window_name, cv2.WINDOW_NORMAL)
-                    cv2.resizeWindow(test_window_name, 320, 240)
-                    cv2.imshow(test_window_name, np.zeros((240, 320, 3), dtype=np.uint8))
-                    cv2.waitKey(1)
-                    cv2.destroyWindow(test_window_name)
-                    print("✅ Display is available! Real-time visualization will be enabled.")
-                    self.display_available = True
-                except Exception as disp_e:
-                    print(f"❌ Display test failed: {disp_e}")
-                    print("Real-time visualization will be disabled.")
-                    self.display_available = False
-                
-                sys.path = old_path
-            except ImportError as e:
-                print(f"❌ OpenCV import error: {e}")
-                print("Trying alternative OpenCV import method...")
-                self.display_available = False
-                self.opencv_cuda = False
-                
-                if 'cv2' in sys.modules:
-                    del sys.modules['cv2']
-                
-                import ctypes
+                    device_mem=cuda.mem_alloc(host_mem.nbytes)
+                except:
+                    pass
+            binding={"name":name,"dtype":dtype,"shape":list(shape),"host":host_mem,"device":device_mem}
+            if self._engine.get_tensor_mode(name)==trt.TensorIOMode.INPUT:
+                self._inputs.append(binding)
+                if len(shape)==4:
+                    self._model_input_height=shape[2]
+                    self._model_input_width=shape[3]
+            else:
+                self._outputs.append(binding)
+        if len(self._outputs)>=2 and self.task_type==AdvantechTaskType.DETECTION:
+            self.task_type=AdvantechTaskType.SEGMENTATION
+    def infer(self,frame:np.ndarray)->Union[List[AdvantechDetection],AdvantechClassification]:
+        original_shape=frame.shape[:2]
+        input_data=self.preprocess(frame)
+        expected_dtype=self._inputs[0]["dtype"]
+        if input_data.dtype!=expected_dtype:
+            input_data=input_data.astype(expected_dtype)
+        np.copyto(self._inputs[0]["host"],input_data.ravel())
+        if PYCUDA_AVAILABLE and self._stream is not None and self._inputs[0]["device"] is not None:
+            cuda.memcpy_htod_async(self._inputs[0]["device"],self._inputs[0]["host"],self._stream)
+            self._context.set_tensor_address(self._inputs[0]["name"],int(self._inputs[0]["device"]))
+            for output in self._outputs:
+                if output["device"] is not None:
+                    self._context.set_tensor_address(output["name"],int(output["device"]))
+            self._context.execute_async_v3(stream_handle=self._stream.handle)
+            for output in self._outputs:
+                if output["device"] is not None:
+                    cuda.memcpy_dtoh_async(output["host"],output["device"],self._stream)
+            self._stream.synchronize()
+        else:
+            self._context.execute_v2([inp["host"] for inp in self._inputs]+[out["host"] for out in self._outputs])
+        det_output=self._outputs[0]["host"].reshape(self._outputs[0]["shape"])
+        if self.task_type==AdvantechTaskType.CLASSIFICATION:
+            return self.postprocess_classification(det_output)
+        elif self.task_type==AdvantechTaskType.SEGMENTATION and len(self._outputs)>=2:
+            mask_output=self._outputs[1]["host"].reshape(self._outputs[1]["shape"])
+            return self.postprocess_segmentation(det_output,mask_output,original_shape)
+        return self.postprocess(det_output,original_shape,num_masks=0)
+    def warmup(self,iterations:int=5):
+        if self._warmed_up:
+            return
+        dummy=np.random.randint(0,255,(self._model_input_height,self._model_input_width,3),dtype=np.uint8)
+        for _ in range(iterations):
+            self.infer(dummy)
+        self._warmed_up=True
+    def cleanup(self):
+        for inp in self._inputs:
+            if inp["device"] is not None:
                 try:
-                    ctypes.CDLL("libopencv_core.so.4.5")
-                    import cv2
-                    self.cv2 = cv2
-                    print(f"Using OpenCV {cv2.__version__} (loaded via alternative method)")
-                except Exception as cv_e:
-                    print(f"❌ Failed to load OpenCV: {cv_e}")
-                    print("Will continue without OpenCV but functionality will be limited")
-                    self.cv2 = None
-            
-            old_sys_path = list(sys.path)
-            
-            for path in ['/usr/lib/python3/dist-packages', '/usr/local/lib/python3.8/dist-packages']:
-                if path not in sys.path:
-                    sys.path.insert(0, path)
-            
-            try:
-                from ultralytics import YOLO
-                self.YOLO = YOLO
-                import ultralytics
-                print(f"Using Ultralytics {ultralytics.__version__}")
-                
-                self.ultralytics_version = ultralytics.__version__
-                
-                from ultralytics.yolo.utils import ops
-                print("Configured ultralytics for Jetson optimization")
-            except ImportError as e:
-                print(f"❌ Error importing ultralytics: {e}")
-                import traceback
-                traceback.print_exc()
-                raise
-            finally:
-                sys.path = old_sys_path
-            
-            self.models = {}
-            
-        except ImportError as e:
-            print(f"❌ Error importing dependencies: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
-    
-    def load_model(self, model_type='detection'):
-        if model_type in self.models:
-            print(f"Model for {model_type} already loaded")
-            return self.models[model_type]
-        
-        model_paths = {
-            'detection': 'yolov8n.pt',
-            'detection-s': 'yolov8s.pt',
-            'segmentation': 'yolov8n-seg.pt',
-            'classification': 'yolov8n-cls.pt'
-        }
-        
-        if model_type not in model_paths:
-            print(f"❌ Invalid model type: {model_type}")
-            print(f"Available types: {', '.join(model_paths.keys())}")
-            return None
-        
-        model_path = model_paths[model_type]
-        
-        if not os.path.exists(model_path):
-            print(f"Downloading {model_path}...")
-            print("[", end="", flush=True)
-            
-            def download_progress(block_num, block_size, total_size):
-                downloaded = block_num * block_size
-                percentage = int((downloaded / total_size) * 30)
-                sys.stdout.write("\r[" + "=" * percentage + " " * (30 - percentage) + f"] {percentage*3}%")
-                sys.stdout.flush()
-            
-            try:
-                import urllib.request
-                url = f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{model_path}"
-                urllib.request.urlretrieve(url, model_path, reporthook=download_progress)
-                print("\n✅ Download complete")
-            except Exception as e:
-                print(f"\n❌ Download failed: {e}")
+                    inp["device"].free()
+                except:
+                    pass
+        for out in self._outputs:
+            if out["device"] is not None:
+                try:
+                    out["device"].free()
+                except:
+                    pass
+        self._context=None
+        self._engine=None
+        self._stream=None
+        self._memory_manager.force_cleanup()
+class AdvantechOnnxEngine(AdvantechEngine):
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,onnx_path:str):
+        super().__init__(config,logger)
+        self.onnx_path=onnx_path
+        self._session=None
+        self._input_name=None
+        self._input_dtype=np.float32
+        self._num_outputs=1
+        self._is_seg_model=False
+        self._load_model()
+    def _load_model(self):
+        if not ONNX_AVAILABLE:
+            raise RuntimeError("ONNX Runtime not available")
+        sess_options=ort.SessionOptions()
+        sess_options.graph_optimization_level=ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.intra_op_num_threads=2
+        sess_options.execution_mode=ort.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.log_severity_level=3
+        providers=[]
+        if 'CUDAExecutionProvider' in ort.get_available_providers():
+            providers.append(('CUDAExecutionProvider',{'device_id':self.config.gpu_device,'arena_extend_strategy':'kSameAsRequested','gpu_mem_limit':self.config.max_memory_mb*1024*1024}))
+        providers.append('CPUExecutionProvider')
+        self._session=ort.InferenceSession(self.onnx_path,sess_options,providers=providers)
+        input_info=self._session.get_inputs()[0]
+        self._input_name=input_info.name
+        input_shape=input_info.shape
+        if len(input_shape)==4 and isinstance(input_shape[2],int) and isinstance(input_shape[3],int):
+            self._model_input_height=input_shape[2]
+            self._model_input_width=input_shape[3]
+        onnx_dtype=input_info.type
+        self._input_dtype=np.float16 if 'float16' in onnx_dtype.lower() else np.float32
+        outputs=self._session.get_outputs()
+        self._num_outputs=len(outputs)
+        if self._num_outputs>=2:
+            out0_shape=outputs[0].shape
+            out1_shape=outputs[1].shape
+            if len(out1_shape)==4 and out1_shape[1]==32:
+                self._is_seg_model=True
+                if self.task_type==AdvantechTaskType.DETECTION:
+                    self.task_type=AdvantechTaskType.SEGMENTATION
+        if self._num_outputs==1 and len(outputs[0].shape)==2:
+            out_shape=outputs[0].shape
+            if out_shape[1] is not None and out_shape[1]>=100:
+                if self.task_type!=AdvantechTaskType.CLASSIFICATION:
+                    self.task_type=AdvantechTaskType.CLASSIFICATION
+    def infer(self,frame:np.ndarray)->Union[List[AdvantechDetection],AdvantechClassification]:
+        original_shape=frame.shape[:2]
+        input_data=self.preprocess(frame)
+        if input_data.dtype!=self._input_dtype:
+            input_data=input_data.astype(self._input_dtype)
+        outputs=self._session.run(None,{self._input_name:input_data})
+        if self.task_type==AdvantechTaskType.CLASSIFICATION:
+            return self.postprocess_classification(outputs[0])
+        elif self.task_type==AdvantechTaskType.SEGMENTATION and self._is_seg_model and len(outputs)>=2:
+            return self.postprocess_segmentation(outputs[0],outputs[1],original_shape)
+        return self.postprocess(outputs[0],original_shape,num_masks=0)
+    def warmup(self,iterations:int=5):
+        if self._warmed_up:
+            return
+        dummy=np.random.randint(0,255,(self._model_input_height,self._model_input_width,3),dtype=np.uint8)
+        for _ in range(iterations):
+            self.infer(dummy)
+        self._warmed_up=True
+    def cleanup(self):
+        self._session=None
+        self._memory_manager.force_cleanup()
+class AdvantechPyTorchEngine(AdvantechEngine):
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,model_path:str):
+        super().__init__(config,logger)
+        self.model_path=model_path
+        self._model=None
+        self._device=None
+        self._use_ultralytics=False
+        self._load_model()
+    def _load_model(self):
+        if not TORCH_AVAILABLE:
+            raise RuntimeError("PyTorch not available")
+        torch.backends.cudnn.benchmark=True
+        self._device=torch.device(f"cuda:{self.config.gpu_device}" if torch.cuda.is_available() else "cpu")
+        try:
+            from ultralytics import YOLO
+            self._model=YOLO(self.model_path)
+            self._use_ultralytics=True
+            if hasattr(self._model,'task'):
+                if self._model.task=='classify':
+                    self.task_type=AdvantechTaskType.CLASSIFICATION
+                    self._model_input_height=224
+                    self._model_input_width=224
+                elif self._model.task=='segment':
+                    self.task_type=AdvantechTaskType.SEGMENTATION
+        except ImportError:
+            self._model=torch.load(self.model_path,map_location=self._device)
+            if isinstance(self._model,dict):
+                self._model=self._model.get('model',self._model.get('ema',self._model))
+            self._model=self._model.float().fuse().eval().to(self._device)
+            self._use_ultralytics=False
+    def infer(self,frame:np.ndarray)->Union[List[AdvantechDetection],AdvantechClassification]:
+        if self._use_ultralytics:
+            results=self._model(frame,conf=self.config.conf_threshold,iou=self.config.iou_threshold,verbose=False)
+            class_names=self.get_class_names()
+            for r in results:
+                if hasattr(r,'probs') and r.probs is not None:
+                    probs=r.probs.data.cpu().numpy()
+                    top_indices=np.argsort(probs)[::-1][:5]
+                    return AdvantechClassification(top_classes=[(int(idx),class_names[idx] if idx<len(class_names) else f"class_{idx}",float(probs[idx])) for idx in top_indices])
+                detections=[]
+                if hasattr(r,'boxes') and r.boxes is not None:
+                    boxes=r.boxes
+                    masks=r.masks if hasattr(r,'masks') and r.masks is not None else None
+                    for i in range(len(boxes)):
+                        xyxy=boxes.xyxy[i].cpu().numpy()
+                        conf=float(boxes.conf[i].cpu().numpy())
+                        cls=int(boxes.cls[i].cpu().numpy())
+                        mask=masks.data[i].cpu().numpy() if masks is not None and i<len(masks) else None
+                        detections.append(AdvantechDetection(bbox=tuple(xyxy.tolist()),confidence=conf,class_id=cls,class_name=class_names[cls] if cls<len(class_names) else f"class_{cls}",mask=mask))
+                return detections
+            return []
+        original_shape=frame.shape[:2]
+        input_data=self.preprocess(frame)
+        input_tensor=torch.from_numpy(input_data).to(self._device)
+        with torch.no_grad():
+            if self.config.precision==AdvantechPrecision.FP16:
+                with torch.cuda.amp.autocast():
+                    outputs=self._model(input_tensor)
+            else:
+                outputs=self._model(input_tensor)
+        if isinstance(outputs,(tuple,list)):
+            outputs=outputs[0]
+        outputs_np=outputs.cpu().numpy()
+        if self.task_type==AdvantechTaskType.CLASSIFICATION:
+            return self.postprocess_classification(outputs_np)
+        return self.postprocess(outputs_np,original_shape,num_masks=0)
+    def warmup(self,iterations:int=5):
+        if self._warmed_up:
+            return
+        dummy=np.random.randint(0,255,(self._model_input_height,self._model_input_width,3),dtype=np.uint8)
+        for _ in range(iterations):
+            self.infer(dummy)
+        self._warmed_up=True
+    def cleanup(self):
+        self._model=None
+        self._memory_manager.force_cleanup()
+class AdvantechVideoSource:
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger):
+        self.config=config
+        self.logger=logger
+        self._capture=None
+        self._width=0
+        self._height=0
+        self._fps=0
+        self._frame_id=0
+    def discover_cameras(self)->List[AdvantechCameraInfo]:
+        cameras=[]
+        if self._check_csi_camera():
+            cameras.append(AdvantechCameraInfo(device_path="csi://0",name="CSI Camera (nvarguscamerasrc)",formats=[AdvantechCameraFormat("NV12",1920,1080,[30,60]),AdvantechCameraFormat("NV12",1280,720,[30,60,120]),AdvantechCameraFormat("NV12",640,480,[30,60,120])],is_working=True,is_csi=True))
+        import re
+        video_devices=sorted(glob.glob("/dev/video*"))
+        for dev in video_devices:
+            info=self._probe_v4l2_device(dev)
+            if info and info.formats:
+                info.is_working=self._test_camera_working(dev)
+                if info.is_working:
+                    cameras.append(info)
+        return cameras
+    def _check_csi_camera(self)->bool:
+        if not GST_AVAILABLE:
+            return False
+        try:
+            pipeline=Gst.parse_launch("nvarguscamerasrc sensor-id=0 ! fakesink")
+            pipeline.set_state(Gst.State.PAUSED)
+            time.sleep(0.3)
+            state=pipeline.get_state(500*Gst.MSECOND)[1]
+            pipeline.set_state(Gst.State.NULL)
+            return state==Gst.State.PAUSED
+        except:
+            return False
+    def _probe_v4l2_device(self,device_path:str)->Optional[AdvantechCameraInfo]:
+        try:
+            result=subprocess.run(["v4l2-ctl","-d",device_path,"--list-formats-ext"],capture_output=True,text=True,timeout=3)
+            if result.returncode!=0:
                 return None
-        
+            name_result=subprocess.run(["v4l2-ctl","-d",device_path,"--info"],capture_output=True,text=True,timeout=3)
+            name=device_path
+            if name_result.returncode==0:
+                for line in name_result.stdout.split('\n'):
+                    if 'Card type' in line and ':' in line:
+                        name=line.split(':',1)[1].strip()
+                        break
+            formats=self._parse_v4l2_formats(result.stdout)
+            return AdvantechCameraInfo(device_path=device_path,name=name,formats=formats,is_working=False,is_csi=False)
+        except:
+            return None
+    def _parse_v4l2_formats(self,output:str)->List[AdvantechCameraFormat]:
+        import re
+        formats=[]
+        current_format=None
+        for line in output.split('\n'):
+            fmt_match=re.search(r"'(\w+)'",line)
+            if fmt_match and any(x in line for x in ['YUYV','MJPG','MJPEG','YU12','NV12']):
+                current_format=fmt_match.group(1)
+                if current_format=='MJPG':
+                    current_format='MJPEG'
+            size_match=re.search(r'Size:.*?(\d+)x(\d+)',line)
+            if size_match and current_format:
+                w,h=int(size_match.group(1)),int(size_match.group(2))
+                fps_matches=re.findall(r'(\d+)\.000 fps',output[output.find(f"{w}x{h}"):output.find(f"{w}x{h}")+500])
+                fps_list=[int(fps) for fps in fps_matches[:5]] or [30]
+                formats.append(AdvantechCameraFormat(pixel_format=current_format,width=w,height=h,fps=fps_list))
+        return formats
+    def _test_camera_working(self,device_path:str)->bool:
         try:
-            print(f"Loading {model_type} model from {model_path}...")
-            device = 0 if self.torch.cuda.is_available() else 'cpu'
-            
-            gc.collect()
-            
-            if device == 0:
-                self.torch.cuda.empty_cache()
-                print(f"Pre-load CUDA memory: {self.torch.cuda.memory_allocated(0) / 1024 / 1024:.2f} MB allocated")
-            
-            model = self.YOLO(model_path)
-            
-            self.models[model_type] = model
-            
-            if device == 0:
-                print(f"Post-load CUDA memory: {self.torch.cuda.memory_allocated(0) / 1024 / 1024:.2f} MB allocated")
-            
-            print(f"✅ {model_type.capitalize()} model loaded successfully on {'CUDA' if device == 0 else 'CPU'}")
-            return model
-        except Exception as e:
-            print(f"❌ Error loading model: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
-    def process_video_with_hwaccel(self, source, mode='detection', conf=0.25, 
-                                  output_dir="./results", frame_skip=0, 
-                                  preprocess=True, max_frames=None,
-                                  batch_size=4, enable_display=True):
-        if mode == 'detection':
-            model = self.load_model('detection')
-        elif mode == 'segmentation':
-            model = self.load_model('segmentation')
-        elif mode == 'classification':
-            model = self.load_model('classification')
-        else:
-            print(f"❌ Invalid mode: {mode}")
-            return None
-        
-        if not model:
-            return None
-        
-        source_path = Path(source)
-        if not source_path.exists():
-            print(f"❌ File not found: {source}")
-            return None
-        
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            print(f"Created output directory: {output_dir}")
-        
-        frames_dir = f"{output_dir}/frames_{mode}_{source_path.stem}"
-        if not os.path.exists(frames_dir):
-            os.makedirs(frames_dir)
-        
-        print(f"\nProcessing video: {source} with {mode} mode...")
-        
-        if preprocess:
-            temp_video = f"{output_dir}/temp_{source_path.stem}.mp4"
-            if not preprocess_video(source, temp_video, hw_accel=self.hw_accel):
-                print("Skipping pre-processing, using original video...")
-                temp_video = source
-        else:
-            temp_video = source
-        
-        try:
-            device = 0 if self.torch.cuda.is_available() else 'cpu'
-            
-            start_time = time.time()
-            
-            cap = self.cv2.VideoCapture(temp_video)
+            cap=cv2.VideoCapture(device_path,cv2.CAP_V4L2)
             if not cap.isOpened():
-                print(f"❌ Failed to open video: {temp_video}")
-                return None
-            
-            width = int(cap.get(self.cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(self.cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = cap.get(self.cv2.CAP_PROP_FPS)
-            total_frames = int(cap.get(self.cv2.CAP_PROP_FRAME_COUNT))
-            
-            if max_frames and max_frames > 0:
-                total_frames = min(total_frames, max_frames)
-                print(f"Processing limited to {max_frames} frames")
-            
-            print(f"Video properties: {width}x{height}, {fps} FPS, {total_frames} frames")
-            
-            display_enabled = enable_display and self.display_available
-            if display_enabled:
-                window_name = f"YOLO {mode.capitalize()} - {source_path.name}"
-                self.cv2.namedWindow(window_name, self.cv2.WINDOW_NORMAL)
-                
-                if width > height:
-                    display_width = min(1280, width)
-                    display_height = int((display_width / width) * height)
-                else:
-                    display_height = min(720, height)
-                    display_width = int((display_height / height) * width)
-                
-                self.cv2.resizeWindow(window_name, display_width, display_height)
-                print(f"✅ Display window created with size {display_width}x{display_height}")
-            
-            frame_count = 0
-            processed_count = 0
-            saved_frames = 0
-            
-            total_objects = 0
-            class_counts = {}
-            processing_times = []
-            
-            print("\nProcessing frames...")
-            
-            batch_frames = []
-            batch_indices = []
-            
-            while frame_count < total_frames:
-                if frame_count % 10 == 0:
-                    percent = int((frame_count / total_frames) * 100)
-                    elapsed = time.time() - start_time
-                    if processed_count > 0 and elapsed > 0:
-                        fps_achieved = processed_count / elapsed
-                        eta_seconds = (total_frames - frame_count) / fps_achieved if fps_achieved > 0 else 0
-                        eta_min = eta_seconds / 60
-                        print(f"\rProgress: {percent}% ({frame_count}/{total_frames}) | "
-                              f"Speed: {fps_achieved:.1f} FPS | ETA: {eta_min:.1f} min", end="", flush=True)
-                
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                frame_count += 1
-                
-                if frame_skip > 0 and (frame_count % (frame_skip + 1)) != 1:
-                    continue
-                
-                batch_frames.append(frame)
-                batch_indices.append(frame_count)
-                
-                if len(batch_frames) >= batch_size or frame_count == total_frames:
-                    try:
-                        batch_start = time.time()
-                        
-                        results = model.predict(
-                            source=batch_frames,
-                            conf=conf,
-                            verbose=False,
-                            stream=False,
-                            device=device,
-                            half=True
-                        )
-                        
-                        batch_time = time.time() - batch_start
-                        processing_times.append(batch_time / len(batch_frames))
-                        
-                        for i, r in enumerate(results):
-                            processed_count += 1
-                            
-                            if mode == 'detection':
-                                if hasattr(r, 'boxes'):
-                                    boxes = r.boxes
-                                    objects_in_frame = len(boxes)
-                                    total_objects += objects_in_frame
-                                    
-                                    for box in boxes:
-                                        cls = int(box.cls[0])
-                                        class_name = model.names[cls]
-                                        
-                                        if class_name in class_counts:
-                                            class_counts[class_name] += 1
-                                        else:
-                                            class_counts[class_name] = 1
-                            
-                            elif mode == 'segmentation':
-                                if hasattr(r, 'masks') and r.masks is not None:
-                                    objects_in_frame = len(r.masks)
-                                    total_objects += objects_in_frame
-                                    
-                                    if hasattr(r, 'boxes'):
-                                        for j in range(min(len(r.boxes), objects_in_frame)):
-                                            cls = int(r.boxes[j].cls[0])
-                                            class_name = model.names[cls]
-                                            
-                                            if class_name in class_counts:
-                                                class_counts[class_name] += 1
-                                            else:
-                                                class_counts[class_name] = 1
-                            
-                            elif mode == 'classification':
-                                if hasattr(r, 'probs'):
-                                    probs = r.probs
-                                    if probs is not None:
-                                        if isinstance(probs, self.torch.Tensor):
-                                            if len(probs.shape) > 0:
-                                                max_idx = probs.argmax().item()
-                                                confidence = probs[max_idx].item()
-                                                class_name = model.names[max_idx]
-                                                
-                                                if class_name in class_counts:
-                                                    class_counts[class_name] += 1
-                                                else:
-                                                    class_counts[class_name] = 1
-                                                
-                                                total_objects += 1
-                                        elif hasattr(probs, 'top1'):
-                                            top_idx = int(probs.top1)
-                                            class_name = model.names[top_idx]
-                                            
-                                            if class_name in class_counts:
-                                                class_counts[class_name] += 1
-                                            else:
-                                                class_counts[class_name] = 1
-                                            
-                                            total_objects += 1
-                            
-                            annotated_frame = r.plot()
-                            frame_index = batch_indices[i]
-                            
-                            frame_path = f"{frames_dir}/frame_{frame_index:06d}.jpg"
-                            self.cv2.imwrite(frame_path, annotated_frame)
-                            saved_frames += 1
-                            
-                            if display_enabled:
-                                progress_text = f"Progress: {int((frame_count / total_frames) * 100)}% | FPS: {1/processing_times[-1]:.1f}"
-                                self.cv2.putText(annotated_frame, progress_text, (10, 30), 
-                                                self.cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                                
-                                self.cv2.imshow(window_name, annotated_frame)
-                                
-                                key = self.cv2.waitKey(1) & 0xFF
-                                if key == 27 or key == ord('q'):
-                                    print("\n⚠️ Processing interrupted by user")
-                                    break
-                        
-                        batch_frames = []
-                        batch_indices = []
-                        
-                        if processed_count % 100 == 0:
-                            gc.collect()
-                            if device == 0:
-                                self.torch.cuda.empty_cache()
-                    except Exception as e:
-                        print(f"\n❌ Error processing batch: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        batch_frames = []
-                        batch_indices = []
-            
+                return False
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT,480)
+            ret,frame=cap.read()
             cap.release()
-            
-            if display_enabled:
-                self.cv2.destroyAllWindows()
-            
-            gc.collect()
-            if device == 0:
-                self.torch.cuda.empty_cache()
-            
-            output_video = f"{output_dir}/{mode}_{source_path.stem}.mp4"
-            print(f"\nCreating final video with FFmpeg...")
-            if saved_frames > 0:
-                effective_fps = fps
-                if frame_skip > 0:
-                    effective_fps = fps / (frame_skip + 1)
-                create_video_from_frames(frames_dir, output_video, fps=effective_fps, hw_accel=self.hw_accel)
-            else:
-                print("❌ No frames were processed or saved")
-            
-            end_time = time.time()
-            total_time = end_time - start_time
-            avg_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
-            
-            print(f"\n\nVideo Processing Complete:")
-            print(f"Processed {processed_count} frames in {total_time:.2f} seconds")
-            print(f"Total frames in video: {total_frames}")
-            print(f"Frame skip: Every {frame_skip + 1} frames")
-            print(f"Average processing time per frame: {avg_processing_time*1000:.1f} ms")
-            print(f"Effective FPS: {processed_count/total_time:.2f}")
-            
-            print(f"\nTotal objects detected: {total_objects}")
-            
-            if class_counts:
-                print("\nObjects by class:")
-                for cls, count in sorted(class_counts.items(), key=lambda x: x[1], reverse=True):
-                    print(f" - {cls}: {count}")
-            
-            summary_file = f"{output_dir}/{mode}_{source_path.stem}_summary.txt"
-            with open(summary_file, 'w') as f:
-                f.write(f"Summary for {source}\n")
-                f.write(f"Mode: {mode}\n")
-                f.write(f"Frames processed: {processed_count}\n")
-                f.write(f"Processing time: {total_time:.2f} seconds\n")
-                f.write(f"Effective FPS: {processed_count/total_time:.2f}\n\n")
-                f.write(f"Total objects detected: {total_objects}\n\n")
-                f.write("Objects by class:\n")
-                for cls, count in sorted(class_counts.items(), key=lambda x: x[1], reverse=True):
-                    f.write(f" - {cls}: {count}\n")
-            
-            print(f"\nResults saved to: {output_dir}")
-            print(f"Output video: {output_video}")
-            print(f"Summary file: {summary_file}")
-            
+            return ret and frame is not None
+        except:
+            return False
+    def open_webcam(self,device:str,width:int,height:int,pixel_format:str,fps:int)->bool:
+        self._width,self._height,self._fps=width,height,fps
+        if device.startswith("csi://"):
+            return self._open_csi_camera(width,height,fps)
+        return self._open_v4l2_camera(device,width,height,pixel_format,fps)
+    def _open_csi_camera(self,width:int,height:int,fps:int)->bool:
+        if not GST_AVAILABLE:
+            return False
+        gst_str=f"nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM),width={width},height={height},framerate={fps}/1,format=NV12 ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! video/x-raw,format=BGR ! appsink max-buffers=2 drop=true"
+        self._capture=cv2.VideoCapture(gst_str,cv2.CAP_GSTREAMER)
+        return self._capture.isOpened()
+    def _open_v4l2_camera(self,device:str,width:int,height:int,pixel_format:str,fps:int)->bool:
+        if GST_AVAILABLE and pixel_format=="MJPEG":
+            gst_str=f"v4l2src device={device} ! image/jpeg,width={width},height={height},framerate={fps}/1 ! jpegdec ! videoconvert ! video/x-raw,format=BGR ! appsink max-buffers=2 drop=true"
+            self._capture=cv2.VideoCapture(gst_str,cv2.CAP_GSTREAMER)
+            if self._capture.isOpened():
+                return True
+        if GST_AVAILABLE:
+            gst_str=f"v4l2src device={device} ! video/x-raw,width={width},height={height},framerate={fps}/1 ! videoconvert ! video/x-raw,format=BGR ! appsink max-buffers=2 drop=true"
+            self._capture=cv2.VideoCapture(gst_str,cv2.CAP_GSTREAMER)
+            if self._capture.isOpened():
+                return True
+        self._capture=cv2.VideoCapture(device,cv2.CAP_V4L2)
+        if self._capture.isOpened():
+            if pixel_format=="MJPEG":
+                self._capture.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc(*'MJPG'))
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH,width)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT,height)
+            self._capture.set(cv2.CAP_PROP_FPS,fps)
+            self._width=int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self._height=int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
             return True
-        except Exception as e:
-            print(f"\n❌ Error processing video: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-        finally:
+        return False
+    def open_rtsp(self,url:str)->bool:
+        if GST_AVAILABLE:
+            pipeline_hw=f"rtspsrc location={url} latency=100 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! video/x-raw,format=BGR ! appsink drop=true max-buffers=1"
             try:
-                if 'cap' in locals() and cap is not None:
-                    cap.release()
-                
-                if self.display_available:
-                    self.cv2.destroyAllWindows()
-                
-                if preprocess and 'temp_video' in locals() and temp_video != source and os.path.exists(temp_video):
-                    print(f"Cleaning up temporary file: {temp_video}")
-                    os.remove(temp_video)
-            except Exception as cleanup_error:
-                print(f"Error during cleanup: {cleanup_error}")
-
-def play_video_with_ffplay(video_path):
-    if not os.path.exists(video_path):
-        print(f"❌ Video file not found: {video_path}")
+                self._capture=cv2.VideoCapture(pipeline_hw,cv2.CAP_GSTREAMER)
+                if self._capture.isOpened():
+                    self._probe_stream_properties()
+                    return True
+            except:
+                if self._capture:
+                    self._capture.release()
+                    self._capture=None
+            pipeline_sw=f"rtspsrc location={url} latency=100 ! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! video/x-raw,format=BGR ! appsink drop=true max-buffers=1"
+            try:
+                self._capture=cv2.VideoCapture(pipeline_sw,cv2.CAP_GSTREAMER)
+                if self._capture.isOpened():
+                    self._probe_stream_properties()
+                    return True
+            except:
+                if self._capture:
+                    self._capture.release()
+                    self._capture=None
+        self._capture=cv2.VideoCapture(url)
+        if self._capture.isOpened():
+            self._probe_stream_properties()
+            return True
         return False
-    
-    try:
-        print(f"Playing video: {video_path}")
-        cmd = [
-            'ffplay', 
-            '-autoexit',
-            '-loglevel', 'error',
-            '-window_title', f"Playing: {os.path.basename(video_path)}",
-            video_path
-        ]
-        
-        print(f"Running command: {' '.join(cmd)}")
-        process = subprocess.Popen(cmd)
-        
-        print("Press Ctrl+C to stop playback")
-        process.wait()
-        return True
-    except KeyboardInterrupt:
-        print("\nPlayback interrupted by user")
-        if process.poll() is None:
-            process.terminate()
-        return True
-    except Exception as e:
-        print(f"❌ Error playing video: {e}")
+    def open_file(self,file_path:str)->bool:
+        if not Path(file_path).exists():
+            return False
+        self._capture=cv2.VideoCapture(file_path)
+        if self._capture.isOpened():
+            self._probe_stream_properties()
+            return True
         return False
-
-def show_menu():
-    print("\n" + "="*50)
-    print("        YOLO HARDWARE ACCELERATED PROCESSOR")
-    print("="*50)
-    print("1. Process Video (Detection - Default with Real-time Display)")
-    print("2. Process Video (Detection - High Performance with Real-time Display)")
-    print("3. Process Video (Segmentation with Real-time Display)")
-    print("4. Process Video (Classification with Real-time Display)")
-    print("5. Play Last Processed Video")
-    print("6. Test Hardware Acceleration")
-    print("7. Exit")
-    choice = input("\nEnter your choice (1-7): ").strip()
-    return choice
-
-def main():
-    hw_accel = setup_environment()
-    
-    try:
-        processor = YOLOHWAccelerated(hw_accel)
-    except Exception as e:
-        print(f"❌ Failed to initialize YOLO processor: {e}")
-        import traceback
-        traceback.print_exc()
-        return
-    
-    results_dir = "./results"
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
-        print(f"Created results directory: {results_dir}")
-    
-    last_processed_video = None
-    
-    while True:
-        choice = show_menu()
-        
-        if choice == '1':
-            source = input("\nEnter video path: ").strip()
-            if not os.path.exists(source):
-                print(f"❌ File not found: {source}")
+    def _probe_stream_properties(self):
+        if self._capture:
+            self._width=int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self._height=int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self._fps=int(self._capture.get(cv2.CAP_PROP_FPS)) or 30
+    def read(self)->Optional[AdvantechFrame]:
+        if self._capture is None or not self._capture.isOpened():
+            return None
+        ret,frame=self._capture.read()
+        if not ret or frame is None:
+            return None
+        self._frame_id+=1
+        return AdvantechFrame(data=frame,timestamp=time.perf_counter(),frame_id=self._frame_id,width=frame.shape[1],height=frame.shape[0])
+    @property
+    def width(self)->int:
+        return self._width
+    @property
+    def height(self)->int:
+        return self._height
+    @property
+    def fps(self)->int:
+        return self._fps
+    def release(self):
+        if self._capture:
+            self._capture.release()
+            self._capture=None
+class AdvantechGstEncoder:
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,width:int,height:int,fps:int):
+        self.config=config
+        self.logger=logger
+        self.width=width
+        self.height=height
+        self.fps=fps
+        self._writer=None
+        self._output_path=None
+    def start_file_output(self,output_path:str)->bool:
+        self._output_path=output_path
+        Path(output_path).parent.mkdir(parents=True,exist_ok=True)
+        if GST_AVAILABLE:
+            gst_str=f"appsrc ! videoconvert ! video/x-raw,format=I420 ! nvv4l2h264enc bitrate=4000000 ! h264parse ! mp4mux ! filesink location={output_path}"
+            self._writer=cv2.VideoWriter(gst_str,cv2.CAP_GSTREAMER,0,self.fps,(self.width,self.height))
+            if self._writer.isOpened():
+                return True
+        self._writer=cv2.VideoWriter(output_path,cv2.VideoWriter_fourcc(*'mp4v'),self.fps,(self.width,self.height))
+        return self._writer.isOpened()
+    def write(self,frame:np.ndarray):
+        if self._writer and self._writer.isOpened():
+            self._writer.write(frame)
+    def release(self):
+        if self._writer:
+            self._writer.release()
+            self._writer=None
+class AdvantechOverlayRenderer:
+    def __init__(self,config:AdvantechConfig):
+        self.config=config
+    def render(self,frame:np.ndarray,detections:List[AdvantechDetection],metrics:Optional[AdvantechMetrics]=None,classification:Optional[AdvantechClassification]=None)->np.ndarray:
+        output=frame.copy()
+        for det in detections:
+            color=get_class_color(det.class_id)
+            x1,y1,x2,y2=map(int,det.bbox)
+            if det.mask is not None:
+                try:
+                    mask=det.mask
+                    if mask.shape[:2]!=output.shape[:2]:
+                        mask=cv2.resize(mask,(output.shape[1],output.shape[0]))
+                    mask_bool=mask>0.5
+                    overlay=output.copy()
+                    overlay[mask_bool]=(overlay[mask_bool]*0.5+np.array(color)*0.5).astype(np.uint8)
+                    output=overlay
+                except:
+                    pass
+            cv2.rectangle(output,(x1,y1),(x2,y2),color,2)
+            label=f"{det.class_name} {det.confidence:.2f}"
+            (lw,lh),_=cv2.getTextSize(label,cv2.FONT_HERSHEY_SIMPLEX,0.5,1)
+            cv2.rectangle(output,(x1,y1-lh-8),(x1+lw,y1),color,-1)
+            cv2.putText(output,label,(x1,y1-4),cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,255),1)
+        if classification is not None:
+            y_offset=60 if metrics else 25
+            h,w=output.shape[:2]
+            overlay=output.copy()
+            cv2.rectangle(overlay,(w-320,y_offset-25),(w-10,y_offset+len(classification.top5)*28+5),(0,0,0),-1)
+            output=cv2.addWeighted(overlay,0.6,output,0.4,0)
+            cv2.putText(output,"Classification:",(w-310,y_offset),cv2.FONT_HERSHEY_SIMPLEX,0.6,(255,255,255),2)
+            y_offset+=28
+            for i,(class_id,class_name,prob) in enumerate(classification.top5):
+                color=(0,255,0) if i==0 else (200,200,200)
+                cv2.putText(output,f"{i+1}. {class_name}: {prob*100:.1f}%",(w-310,y_offset+i*28),cv2.FONT_HERSHEY_SIMPLEX,0.55,color,1)
+        if metrics:
+            info=[f"FPS: {metrics.fps:.1f}",f"Latency: {metrics.avg_latency_ms:.1f}ms",f"GPU: {metrics.gpu_memory_used_mb:.0f}MB"]
+            y=25
+            for line in info:
+                cv2.putText(output,line,(10,y),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,0),2)
+                y+=22
+        return output
+class AdvantechPipeline:
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,engine:AdvantechEngine,source:AdvantechVideoSource):
+        self.config=config
+        self.logger=logger
+        self.engine=engine
+        self.source=source
+        self.metrics=AdvantechMetricsCollector()
+        self.renderer=AdvantechOverlayRenderer(config)
+        self._running=False
+        self._capture_queue=AdvantechRingBuffer(config.queue_size,config.drop_policy)
+        self._output_queue=AdvantechRingBuffer(config.queue_size,config.drop_policy)
+        self._threads:List[threading.Thread]=[]
+        self._encoder:Optional[AdvantechGstEncoder]=None
+        self._memory_manager=AdvantechMemoryManager()
+        self._stop_event=threading.Event()
+    def start(self):
+        self._running=True
+        self._stop_event.clear()
+        self.metrics.set_model_status("running")
+        if self.config.save_video:
+            output_file=str(Path(self.config.output_path)/f"output_{int(time.time())}.mp4")
+            self._encoder=AdvantechGstEncoder(self.config,self.logger,self.source.width,self.source.height,self.source.fps)
+            self._encoder.start_file_output(output_file)
+        capture_thread=threading.Thread(target=self._capture_loop,daemon=True)
+        capture_thread.start()
+        self._threads.append(capture_thread)
+        inference_thread=threading.Thread(target=self._inference_loop,daemon=True)
+        inference_thread.start()
+        self._threads.append(inference_thread)
+        output_thread=threading.Thread(target=self._output_loop,daemon=True)
+        output_thread.start()
+        self._threads.append(output_thread)
+    def _capture_loop(self):
+        while self._running and not self._stop_event.is_set():
+            frame=self.source.read()
+            if frame is None:
+                time.sleep(0.001)
                 continue
-            
-            conf = float(input("Enter confidence threshold (0.1-1.0): ").strip() or "0.25")
-            
-            success = processor.process_video_with_hwaccel(
-                source=source, 
-                mode='detection', 
-                conf=conf,
-                output_dir=results_dir,
-                preprocess=True,
-                frame_skip=0,
-                batch_size=4,
-                enable_display=True
-            )
-            
-            if success:
-                last_processed_video = f"{results_dir}/detection_{Path(source).stem}.mp4"
-            
-        elif choice == '2':
-            source = input("\nEnter video path: ").strip()
-            if not os.path.exists(source):
-                print(f"❌ File not found: {source}")
+            self._capture_queue.put(frame)
+            self.metrics.update_queue_size("capture",self._capture_queue.size())
+    def _inference_loop(self):
+        while self._running and not self._stop_event.is_set():
+            frame=self._capture_queue.get(timeout=0.1)
+            if frame is None:
                 continue
-            
-            conf = float(input("Enter confidence threshold (0.1-1.0): ").strip() or "0.25")
-            frame_skip = int(input("Frame skip (0=process all, 1=every other frame, etc): ").strip() or "2")
-            
-            success = processor.process_video_with_hwaccel(
-                source=source, 
-                mode='detection', 
-                conf=conf,
-                output_dir=results_dir,
-                preprocess=True,
-                frame_skip=frame_skip,
-                batch_size=8,
-                enable_display=True
-            )
-            
-            if success:
-                last_processed_video = f"{results_dir}/detection_{Path(source).stem}.mp4"
-            
-        elif choice == '3':
-            source = input("\nEnter video path: ").strip()
-            if not os.path.exists(source):
-                print(f"❌ File not found: {source}")
+            if self._memory_manager.get_memory_usage_mb()>self.config.max_memory_mb*0.9:
+                self._memory_manager.force_cleanup()
+                self.metrics.record_drop()
                 continue
-            
-            conf = float(input("Enter confidence threshold (0.1-1.0): ").strip() or "0.25")
-            frame_skip = int(input("Frame skip (0=process all, 1=every other frame, etc): ").strip() or "1")
-            
-            success = processor.process_video_with_hwaccel(
-                source=source, 
-                mode='segmentation', 
-                conf=conf,
-                output_dir=results_dir,
-                preprocess=True,
-                frame_skip=frame_skip,
-                batch_size=2,
-                enable_display=True
-            )
-            
-            if success:
-                last_processed_video = f"{results_dir}/segmentation_{Path(source).stem}.mp4"
-            
-        elif choice == '4':
-            source = input("\nEnter video path: ").strip()
-            if not os.path.exists(source):
-                print(f"❌ File not found: {source}")
-                continue
-            
-            conf = float(input("Enter confidence threshold (0.1-1.0): ").strip() or "0.25")
-            frame_skip = int(input("Frame skip (0=process all, 1=every other frame, etc): ").strip() or "2")
-            
-            success = processor.process_video_with_hwaccel(
-                source=source, 
-                mode='classification', 
-                conf=conf,
-                output_dir=results_dir,
-                preprocess=True,
-                frame_skip=frame_skip,
-                batch_size=4,
-                enable_display=True
-            )
-            
-            if success:
-                last_processed_video = f"{results_dir}/classification_{Path(source).stem}.mp4"
-            
-        elif choice == '5':
-            if last_processed_video and os.path.exists(last_processed_video):
-                play_video_with_ffplay(last_processed_video)
-            else:
-                video_path = input("\nNo recent video. Enter video path to play: ").strip()
-                if os.path.exists(video_path):
-                    play_video_with_ffplay(video_path)
+            start_time=time.perf_counter()
+            try:
+                result=self.engine.infer(frame.data)
+                if isinstance(result,AdvantechClassification):
+                    frame.classification=result
+                    frame.detections=[]
                 else:
-                    print(f"❌ File not found: {video_path}")
-            
-        elif choice == '6':
-            print("\n== Testing Hardware Acceleration ==")
-            hw_accel = test_hardware_acceleration()
-            print("\nHardware acceleration capabilities:")
-            for k, v in hw_accel.items():
-                print(f" - {k}: {v}")
-                
-        elif choice == '7':
-            print("\nExiting YOLO Video Processor. Goodbye!")
-            break
-            
+                    frame.detections=result
+                    frame.classification=None
+            except Exception as e:
+                self.logger.error(f"Inference error: {e}","Pipeline")
+                frame.detections=[]
+                frame.classification=None
+            frame.inference_time_ms=(time.perf_counter()-start_time)*1000
+            frame.total_latency_ms=(time.perf_counter()-frame.timestamp)*1000
+            self.metrics.record_latency(frame.total_latency_ms)
+            self._output_queue.put(frame)
+    def _output_loop(self):
+        window_name="Advantech YOLO"
+        if self.config.show_display:
+            try:
+                cv2.namedWindow(window_name,cv2.WINDOW_NORMAL)
+            except:
+                self.config.show_display=False
+        while self._running and not self._stop_event.is_set():
+            frame=self._output_queue.get(timeout=0.1)
+            if frame is None:
+                continue
+            self.metrics.record_frame()
+            current_metrics=self.metrics.get_metrics()
+            rendered=self.renderer.render(frame.data,frame.detections,current_metrics,frame.classification)
+            if self._encoder:
+                self._encoder.write(rendered)
+            if self.config.show_display:
+                try:
+                    cv2.imshow(window_name,rendered)
+                    key=cv2.waitKey(1)&0xFF
+                    if key==ord('q') or key==27:
+                        self._stop_event.set()
+                        self._running=False
+                except:
+                    pass
+    def stop(self):
+        self._running=False
+        self._stop_event.set()
+        self._capture_queue.close()
+        self._output_queue.close()
+        for thread in self._threads:
+            thread.join(timeout=2.0)
+        if self._encoder:
+            self._encoder.release()
+        self.source.release()
+        self.engine.cleanup()
+        if self.config.show_display:
+            try:
+                cv2.destroyAllWindows()
+            except:
+                pass
+        self.metrics.set_model_status("stopped")
+    def is_running(self)->bool:
+        return self._running and not self._stop_event.is_set()
+    def get_metrics(self)->AdvantechMetrics:
+        return self.metrics.get_metrics()
+    def get_total_fps(self)->float:
+        return self.metrics.get_total_fps()
+    def get_total_frames(self)->int:
+        return self.metrics.get_total_frames()
+class AdvantechHealthServer:
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,pipeline:AdvantechPipeline):
+        self.config=config
+        self.logger=logger
+        self.pipeline=pipeline
+    def start(self):
+        if not FLASK_AVAILABLE:
+            return
+        app=Flask("AdvantechHealth")
+        app.logger.disabled=True
+        import logging as log
+        log.getLogger('werkzeug').disabled=True
+        @app.route('/health')
+        def health():
+            m=self.pipeline.get_metrics()
+            return jsonify({"status":"healthy","fps":m.fps,"latency_ms":m.avg_latency_ms,"gpu_memory_mb":m.gpu_memory_used_mb})
+        def run():
+            try:
+                app.run(host='0.0.0.0',port=self.config.health_port,threaded=True,use_reloader=False)
+            except:
+                pass
+        threading.Thread(target=run,daemon=True).start()
+class AdvantechBenchmark:
+    def __init__(self,config:AdvantechConfig,logger:AdvantechLogger,engine:AdvantechEngine):
+        self.config=config
+        self.logger=logger
+        self.engine=engine
+    def run(self)->Dict[str,Any]:
+        input_h,input_w=self.engine._model_input_height,self.engine._model_input_width
+        dummy=np.random.randint(0,255,(input_h,input_w,3),dtype=np.uint8)
+        for _ in range(self.config.warmup_iterations):
+            self.engine.infer(dummy)
+        latencies=[]
+        for _ in range(self.config.benchmark_iterations):
+            start=time.perf_counter()
+            self.engine.infer(dummy)
+            latencies.append((time.perf_counter()-start)*1000)
+        sorted_lat=sorted(latencies)
+        n=len(sorted_lat)
+        return {"iterations":n,"avg_ms":sum(latencies)/n,"min_ms":min(latencies),"max_ms":max(latencies),"p50_ms":sorted_lat[int(n*0.5)],"p90_ms":sorted_lat[int(n*0.9)],"p95_ms":sorted_lat[int(n*0.95)],"p99_ms":sorted_lat[min(int(n*0.99),n-1)],"fps":1000.0/(sum(latencies)/n)}
+def print_banner():
+    banner=f"""
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║     █████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗███████╗ ██████╗██╗  ██╗  ║
+║    ██╔══██╗██╔══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██╔════╝██╔════╝██║  ██║  ║
+║    ███████║██║  ██║╚██╗ ██╔╝███████║██╔██╗ ██║   ██║   █████╗  ██║     ███████║  ║
+║    ██╔══██║██║  ██║ ╚████╔╝ ██╔══██║██║╚██╗██║   ██║   ██╔══╝  ██║     ██╔══██║  ║
+║    ██║  ██║██████╔╝  ╚██╔╝  ██║  ██║██║ ╚████║   ██║   ███████╗╚██████╗██║  ██║  ║
+║    ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝  ║
+║                        YOLO Inference Pipeline v{__version__}                            ║
+╠══════════════════════════════════════════════════════════════════════════════════╣
+║  Author: {__author__:<18}  Build: {__build_date__:<14}                               ║
+╠══════════════════════════════════════════════════════════════════════════════════╣
+║  {__copyright__}             ║
+╚══════════════════════════════════════════════════════════════════════════════════╝"""
+    print(banner)
+class AdvantechCLI:
+    def __init__(self):
+        self.config=AdvantechConfig.from_env()
+        self.logger=AdvantechLogger(self.config)
+        self._shutdown_event=threading.Event()
+        self._pipeline:Optional[AdvantechPipeline]=None
+        signal.signal(signal.SIGINT,self._signal_handler)
+        signal.signal(signal.SIGTERM,self._signal_handler)
+    def _signal_handler(self,signum,frame):
+        self._shutdown_event.set()
+        if self._pipeline:
+            self._pipeline.stop()
+    def _get_choice(self,prompt:str,valid:List[str],default:str="1")->str:
+        try:
+            choice=input(f"{prompt} [{default}]: ").strip() or default
+            return choice if choice in valid else default
+        except (EOFError,KeyboardInterrupt):
+            sys.exit(0)
+    def _get_input(self,prompt:str,default:str="")->str:
+        try:
+            value=input(f"{prompt} [{default}]: ").strip()
+            return value if value else default
+        except (EOFError,KeyboardInterrupt):
+            sys.exit(0)
+    def run_interactive(self):
+        print_banner()
+        print("\n[1] Detection  [2] Classification  [3] Segmentation")
+        task_choice=self._get_choice("Select task",["1","2","3"],"1")
+        self.config.task_type={
+            "1":AdvantechTaskType.DETECTION,
+            "2":AdvantechTaskType.CLASSIFICATION,
+            "3":AdvantechTaskType.SEGMENTATION
+        }[task_choice]
+        print("\n[1] PyTorch  [2] ONNX  [3] TensorRT")
+        format_choice=self._get_choice("Select format",["1","2","3"],"1")
+        self.config.model_format={
+            "1":AdvantechModelFormat.PYTORCH,
+            "2":AdvantechModelFormat.ONNX,
+            "3":AdvantechModelFormat.TENSORRT
+        }[format_choice]
+        ext_map={"1":".pt","2":".onnx","3":".trt/.engine"}
+        self.config.model_path=self._get_input(f"Model path ({ext_map[format_choice]})","")
+        if not self.config.model_path:
+            print("Error: Model path required")
+            return
+        print("\n[1] Webcam  [2] RTSP  [3] File")
+        source_choice=self._get_choice("Select source",["1","2","3"],"1")
+        self.config.input_source={
+            "1":AdvantechInputSource.WEBCAM,
+            "2":AdvantechInputSource.RTSP,
+            "3":AdvantechInputSource.FILE
+        }[source_choice]
+        if self.config.input_source==AdvantechInputSource.WEBCAM:
+            if not self._select_webcam():
+                return
+        elif self.config.input_source==AdvantechInputSource.RTSP:
+            self.config.input_path=self._get_input("RTSP URL","rtsp://192.168.1.100:554/stream")
+        elif self.config.input_source==AdvantechInputSource.FILE:
+            self.config.input_path=self._get_input("Video file path","input.mp4")
+        save_choice=self._get_choice("Save output? (y/n)",["y","n","Y","N"],"n")
+        self.config.save_video=save_choice.lower()=="y"
+        if self.config.save_video:
+            self.config.output_path=self._get_input("Output directory","./output")
+        display_choice=self._get_choice("Show display? (y/n)",["y","n","Y","N"],"y")
+        self.config.show_display=display_choice.lower()=="y"
+        self._run_pipeline()
+    def _select_webcam(self)->bool:
+        print("\nDiscovering cameras...")
+        source=AdvantechVideoSource(self.config,self.logger)
+        cameras=source.discover_cameras()
+        if not cameras:
+            print("No cameras found!")
+            return False
+        print(f"\nFound {len(cameras)} camera(s):")
+        for i,cam in enumerate(cameras,1):
+            status="[OK]" if cam.is_working else "[?]"
+            cam_type="[CSI]" if cam.is_csi else "[USB]"
+            print(f"  {i}) {cam.device_path} - {cam.name} {cam_type} {status}")
+        cam_choice=self._get_choice("Select camera",[str(i) for i in range(1,len(cameras)+1)],"1")
+        selected_camera=cameras[int(cam_choice)-1]
+        self.config.camera_device=selected_camera.device_path
+        resolutions=selected_camera.get_resolutions()
+        if not resolutions:
+            print("No resolutions available!")
+            return False
+        print(f"\nResolutions:")
+        for i,(w,h) in enumerate(resolutions[:10],1):
+            formats_at_res=selected_camera.get_formats_for_resolution(w,h)
+            fmt_strs=", ".join([f.pixel_format for f in formats_at_res])
+            print(f"  {i}) {w}x{h} [{fmt_strs}]")
+        res_choice=self._get_choice("Select resolution",[str(i) for i in range(1,min(len(resolutions)+1,11))],"1")
+        selected_res=resolutions[int(res_choice)-1]
+        self.config.camera_width,self.config.camera_height=selected_res
+        formats_at_res=selected_camera.get_formats_for_resolution(self.config.camera_width,self.config.camera_height)
+        if len(formats_at_res)>1:
+            print(f"\nFormats:")
+            for i,fmt in enumerate(formats_at_res,1):
+                fps_str="/".join(map(str,fmt.fps[:3]))
+                print(f"  {i}) {fmt.pixel_format} @{fps_str}fps")
+            fmt_choice=self._get_choice("Select format",[str(i) for i in range(1,len(formats_at_res)+1)],"1")
+            selected_fmt=formats_at_res[int(fmt_choice)-1]
         else:
-            print("\n❌ Invalid choice. Please try again.")
-
-if __name__ == "__main__":
+            selected_fmt=formats_at_res[0]
+        self.config.camera_format=selected_fmt.pixel_format
+        if len(selected_fmt.fps)>1:
+            print(f"\nFramerates:")
+            for i,fps in enumerate(selected_fmt.fps[:5],1):
+                print(f"  {i}) {fps} fps")
+            fps_choice=self._get_choice("Select framerate",[str(i) for i in range(1,min(len(selected_fmt.fps)+1,6))],"1")
+            self.config.camera_fps=selected_fmt.fps[int(fps_choice)-1]
+        else:
+            self.config.camera_fps=selected_fmt.fps[0]
+        print(f"\nSelected: {self.config.camera_device} @ {self.config.camera_width}x{self.config.camera_height} {self.config.camera_format} {self.config.camera_fps}fps")
+        return True
+    def _run_pipeline(self):
+        if not Path(self.config.model_path).exists():
+            print(f"Error: Model not found: {self.config.model_path}")
+            return
+        loader=AdvantechModelLoader(self.config,self.logger)
+        try:
+            engine=loader.load(self.config.model_path,self.config.model_format)
+            engine.warmup(iterations=self.config.warmup_iterations)
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            return
+        source=AdvantechVideoSource(self.config,self.logger)
+        try:
+            if self.config.input_source==AdvantechInputSource.WEBCAM:
+                if not source.open_webcam(self.config.camera_device,self.config.camera_width,self.config.camera_height,self.config.camera_format,self.config.camera_fps):
+                    engine.cleanup()
+                    print("Error: Failed to open camera")
+                    return
+            elif self.config.input_source==AdvantechInputSource.RTSP:
+                if not source.open_rtsp(self.config.input_path):
+                    engine.cleanup()
+                    print("Error: Failed to open RTSP stream")
+                    return
+            elif self.config.input_source==AdvantechInputSource.FILE:
+                if not source.open_file(self.config.input_path):
+                    engine.cleanup()
+                    print("Error: Failed to open video file")
+                    return
+        except Exception as e:
+            engine.cleanup()
+            print(f"Error opening source: {e}")
+            return
+        self._pipeline=AdvantechPipeline(self.config,self.logger,engine,source)
+        health_server=AdvantechHealthServer(self.config,self.logger,self._pipeline)
+        health_server.start()
+        self._pipeline.start()
+        print("\n" + "="*66)
+        print("  Pipeline started. Press 'q' in display window to stop.")
+        print("="*66 + "\n")
+        while not self._shutdown_event.is_set() and self._pipeline.is_running():
+            time.sleep(0.1)
+        total_fps=self._pipeline.get_total_fps()
+        total_frames=self._pipeline.get_total_frames()
+        self._pipeline.stop()
+        print("\n" + "="*66)
+        print(f"  Inference Pipeline Stopped")
+        print(f"  Total Frames: {total_frames}")
+        print(f"  Average FPS:  {total_fps:.2f}")
+        print("="*66 + "\n")
+    def run_dryrun(self,model_path:Optional[str]=None):
+        print_banner()
+        print("\n=== Dry Run ===\n")
+        if model_path and Path(model_path).exists():
+            loader=AdvantechModelLoader(self.config,self.logger)
+            try:
+                engine=loader.load(model_path)
+                engine.warmup(iterations=2)
+                print(f"Model load: SUCCESS")
+                engine.cleanup()
+            except Exception as e:
+                print(f"Model load: FAILED - {e}")
+        source=AdvantechVideoSource(self.config,self.logger)
+        cameras=source.discover_cameras()
+        print(f"\nFound {len(cameras)} camera(s):")
+        for cam in cameras:
+            status="OK" if cam.is_working else "NOT WORKING"
+            print(f"  {cam.device_path}: {cam.name} [{status}]")
+            for fmt in cam.formats[:5]:
+                print(f"    - {fmt}")
+    def run_benchmark(self,model_path:str):
+        print_banner()
+        print("\n=== Benchmark ===\n")
+        if not Path(model_path).exists():
+            print(f"Error: Model not found: {model_path}")
+            return
+        loader=AdvantechModelLoader(self.config,self.logger)
+        engine=loader.load(model_path)
+        benchmark=AdvantechBenchmark(self.config,self.logger,engine)
+        results=benchmark.run()
+        print(f"Iterations: {results['iterations']}")
+        print(f"Avg: {results['avg_ms']:.2f}ms  Min: {results['min_ms']:.2f}ms  Max: {results['max_ms']:.2f}ms")
+        print(f"P50: {results['p50_ms']:.2f}ms  P95: {results['p95_ms']:.2f}ms  P99: {results['p99_ms']:.2f}ms")
+        print(f"FPS: {results['fps']:.1f}")
+        engine.cleanup()
+def main():
+    import argparse
+    parser=argparse.ArgumentParser(description="Advantech YOLO Inference Pipeline")
+    parser.add_argument("--dryrun",action="store_true",help="Verify setup")
+    parser.add_argument("--benchmark",action="store_true",help="Run benchmark")
+    parser.add_argument("--model",type=str,help="Model path")
+    parser.add_argument("--format",choices=["pt","onnx","trt"],help="Model format")
+    parser.add_argument("--source",type=str,help="Input source")
+    parser.add_argument("--task",choices=["detection","classification","segmentation"],default="detection")
+    parser.add_argument("--precision",choices=["fp32","fp16","int8"],default="fp16")
+    parser.add_argument("--device",type=int,default=0,help="GPU device")
+    parser.add_argument("--save-video",action="store_true")
+    parser.add_argument("--output",type=str,default="./output")
+    parser.add_argument("--no-display",action="store_true")
+    parser.add_argument("--max-memory",type=int,default=6000,help="Max GPU memory MB")
+    args=parser.parse_args()
+    cli=AdvantechCLI()
+    cli.config.precision=AdvantechPrecision(args.precision)
+    cli.config.gpu_device=args.device
+    cli.config.save_video=args.save_video
+    cli.config.output_path=args.output
+    cli.config.show_display=not args.no_display
+    cli.config.max_memory_mb=args.max_memory
+    cli.config.task_type={"detection":AdvantechTaskType.DETECTION,"classification":AdvantechTaskType.CLASSIFICATION,"segmentation":AdvantechTaskType.SEGMENTATION}[args.task]
+    if args.format:
+        cli.config.model_format=AdvantechModelFormat(args.format)
+    if args.dryrun:
+        cli.run_dryrun(args.model)
+    elif args.benchmark and args.model:
+        cli.run_benchmark(args.model)
+    elif args.model and args.source:
+        cli.config.model_path=args.model
+        cli.config.input_path=args.source
+        if args.source.startswith("rtsp://"):
+            cli.config.input_source=AdvantechInputSource.RTSP
+        elif args.source.startswith("/dev/video") or args.source.startswith("csi://"):
+            cli.config.input_source=AdvantechInputSource.WEBCAM
+            cli.config.camera_device=args.source
+            cli.config.camera_width=1280
+            cli.config.camera_height=720
+            cli.config.camera_format="MJPEG"
+            cli.config.camera_fps=30
+        else:
+            cli.config.input_source=AdvantechInputSource.FILE
+        print_banner()
+        cli._run_pipeline()
+    else:
+        cli.run_interactive()
+if __name__=="__main__":
     main()
