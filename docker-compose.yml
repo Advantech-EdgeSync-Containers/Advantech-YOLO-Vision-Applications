@@ -1,16 +1,27 @@
 version: '2.4'
 # ==========================================================================
-# Advantech-YOLO-Vision-Application Docker Compose File
+# Advantech YOLO Vision Applications Docker Compose File
 # ==========================================================================
-# Version:      1.2.0
+# Version:      2.0.0
 # Author:       Samir Singh <samir.singh@advantech.com>
 # Created:      March 20, 2025
-# Last Updated: May 16, 2025
+# Last Updated: November 28, 2025
 # 
 # Description:
-#   This Docker Compose file creates a ready-to-use Advantech-YOLO-Vision-Application
-#   container with all necessary hardware acceleration settings for Advantech
-#   edge AI devices and NVIDIA Jetson platforms.
+#   This Docker Compose file creates a production-ready container for
+#   Advantech YOLO Vision Applications with full hardware acceleration
+#   support for NVIDIA Jetson platforms (JetPack 5.1.1/5.1.2).
+#
+# Features:
+#   - NVIDIA GPU acceleration (CUDA, TensorRT, cuDNN)
+#   - GStreamer hardware decode/encode (nvv4l2decoder, nvv4l2h264enc)
+#   - X11 display forwarding for visualization
+#   - V4L2 camera access
+#   - CSI camera support via nvarguscamerasrc
+#
+# Usage:
+#   ./build.sh              # Recommended: uses build script
+#   docker-compose up -d    # Alternative: direct compose
 #
 # Terms and Conditions:
 #   1. This software is provided by Advantech Corporation "as is" and any
@@ -20,61 +31,123 @@ version: '2.4'
 #   2. In no event shall Advantech Corporation be liable for any direct, indirect,
 #      incidental, special, exemplary, or consequential damages arising in any way
 #      out of the use of this software.
-#   3. Redistribution and use in source and binary forms, with or without
-#      modification, are permitted provided that the above copyright notice and
-#      this permission notice appear in all copies.
 #
-# Copyright (c) 2025 Advantech Corporation. All rights reserved.
+# Copyright (c) 2024-2025 Advantech Corporation. All rights reserved.
 # ==========================================================================
 
 services:
   advantech-yolo-vision:
+    # Container image - ARM64 for Jetson devices
     image: edgesync.azurecr.io/advantech/advantech-yolo-vision-applications:1.5.0-Ubuntu20.04-ARM
     container_name: advantech-yolo-vision
+
+    # Security settings
     privileged: true
     ipc: host
     network_mode: host
     runtime: nvidia
     security_opt:
       - seccomp:unconfined
+
+    # Interactive mode
     tty: true
     stdin_open: true
-    entrypoint: ["/bin/bash"]
+    
+    # Entrypoint: Run init.sh on first start, then keep container running
+    # The init.sh script checks if already initialized to avoid re-running
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        if [ ! -f /tmp/.advantech_initialized ]; then
+          echo "════════════════════════════════════════════════════════════════"
+          echo "  First-time initialization - Installing ONNX Runtime GPU..."
+          echo "════════════════════════════════════════════════════════════════"
+          if [ -f /advantech/init.sh ]; then
+            chmod +x /advantech/init.sh
+            /advantech/init.sh --quiet || echo "Warning: init.sh completed with errors"
+          fi
+          touch /tmp/.advantech_initialized
+          echo "════════════════════════════════════════════════════════════════"
+          echo "  Initialization complete! Container is ready."
+          echo "════════════════════════════════════════════════════════════════"
+        else
+          echo "Environment already initialized. Skipping init.sh"
+        fi
+        exec /bin/bash
+
+    # Container metadata
     labels:
       maintainer: "Samir Singh <samir.singh@advantech.com>"
-      vendor: "Advantech"
-      version: "1.2"
-      description: "Advantech acc-yolo-app development Container with hardware acceleration"
+      vendor: "Advantech Corporation"
+      version: "2.0.0"
+      description: "Advantech YOLO Vision Applications with hardware acceleration"
+      com.advantech.jetpack: "5.1.2"
+      com.advantech.cuda: "11.4"
+      com.advantech.tensorrt: "8.5"
+
+    # Environment variables
     environment:
-      - DISPLAY=${DISPLAY}
+      # Display settings
+      - DISPLAY=${DISPLAY:-:0}
       - XAUTHORITY=${XAUTHORITY:-/tmp/.docker.xauth}
       - QT_X11_NO_MITSHM=1
+      - XDG_RUNTIME_DIR=/tmp
+
+      # NVIDIA settings
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all,compute,video,utility,graphics
+
+      # CUDA settings
       - CUDA_DEVICE_MAX_CONNECTIONS=1
+      - CUDA_CACHE_DISABLE=0
+      - CUDA_LAUNCH_BLOCKING=0
+
+      # PyTorch settings
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64
-      - GST_DEBUG=3
-      - USE_GSTREAMER=1
+
+      # GStreamer settings - WARNINGS DISABLED
+      - GST_DEBUG=0
       - GST_DEBUG_NO_COLOR=1
+      - USE_GSTREAMER=1
       - GST_PLUGIN_SCANNER=/usr/lib/aarch64-linux-gnu/gstreamer-1.0/gst-plugin-scanner
       - GST_PLUGIN_SYSTEM_PATH=/usr/lib/aarch64-linux-gnu/gstreamer-1.0
       - GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0/deepstream
+
+      # OpenGL/EGL settings
       - __EGL_VENDOR_LIBRARY_DIRS=/usr/share/glvnd/egl_vendor.d/:/etc/glvnd/egl_vendor.d/
       - __GLX_VENDOR_LIBRARY_NAME=nvidia
       - __GL_SYNC_TO_VBLANK=0
       - XMODIFIERS=@im=none
-      - XDG_RUNTIME_DIR=/tmp
-      - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH}
+
+      # Library paths
+      - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu:/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+
+      # Python settings
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+
+    # Volume mounts
     volumes:
+      # Application directories (read-write)
       - ./src:/advantech/src:rw
       - ./models:/advantech/models:rw
       - ./data:/advantech/data:rw
       - ./results:/advantech/results:rw
+      - ./diagnostics:/advantech/diagnostics:rw
+
+      # Init script
+      - ./init.sh:/advantech/init.sh:ro
+
+      # X11 display
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ${XAUTHORITY:-$HOME/.Xauthority}:/tmp/.docker.xauth:rw
       - /tmp:/tmp:rw
+
+      # Device access
       - /dev:/dev:rw
       - /sys:/sys:rw
+
+      # NVIDIA/Jetson system files (read-only)
       - /etc/nv_tegra_release:/etc/nv_tegra_release:ro
       - /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra:ro
       - /usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:ro
@@ -82,26 +155,70 @@ services:
       - /usr/src/jetson_multimedia_api:/usr/src/jetson_multimedia_api:ro
       - /usr/share/glvnd/egl_vendor.d/:/usr/share/glvnd/egl_vendor.d/:ro
       - /etc/glvnd/egl_vendor.d/:/etc/glvnd/egl_vendor.d/:ro
+
+    # Device access - NVIDIA and camera devices
     devices:
+      # NVIDIA core devices
       - /dev/nvhost-ctrl
       - /dev/nvhost-ctrl-gpu
       - /dev/nvhost-prof-gpu
       - /dev/nvmap
       - /dev/nvhost-gpu
       - /dev/nvhost-as-gpu
+
+      # Video encode/decode
       - /dev/nvhost-vic
       - /dev/nvhost-msenc
       - /dev/nvhost-nvdec
       - /dev/nvhost-nvjpg
+
+      # Orin-specific devices
       - /dev/nvgpu/igpu0
       - /dev/nvhost-nvdec1
       - /dev/nvhost-nvenc1
       - /dev/nvhost-nvdla0
       - /dev/nvhost-nvdla1
+
+      # Display devices
       - /dev/nvidia-modeset
       - /dev/nvidia0
       - /dev/nvidiactl
-    shm_size: '2gb'
+
+      # Camera devices (V4L2)
+      # Note: /dev/video* devices are available via /dev mount
+
+    # Resource limits
+    shm_size: '4gb'
+
+    # Restart policy
     restart: unless-stopped
+
+    # Working directory
     working_dir: /advantech
 
+    # Health check
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import onnxruntime; print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# ==========================================================================
+# Notes:
+# ==========================================================================
+# 1. Run ./init.sh inside the container after first start to install
+#    ONNX Runtime GPU and other dependencies.
+#
+# 2. For X11 display, run on host before starting container:
+#    xhost +local:docker
+#
+# 3. To check available cameras:
+#    v4l2-ctl --list-devices
+#
+# 4. To access container shell:
+#    docker exec -it advantech-yolo-vision bash
+#
+# 5. For CSI cameras, use nvarguscamerasrc:
+#    gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! nvvidconv ! xvimagesink
+# ==========================================================================
