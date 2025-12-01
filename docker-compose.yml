@@ -137,6 +137,7 @@ services:
 
       # Init script
       - ./init.sh:/advantech/init.sh:ro
+      - ./wise-bench.sh:/advantech/wise-bench.sh:ro
 
       # X11 display
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
