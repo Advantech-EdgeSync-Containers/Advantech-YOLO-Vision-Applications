@@ -467,7 +467,7 @@ print_table_row "OpenCV CUDA" "$([[ $OPENCV_OK -eq 1 ]] && echo "✓ Accelerated
 print_table_row "PyTorch CUDA" "$([[ $PYTORCH_OK -eq 1 ]] && echo "✓ Accelerated" || echo "⚠ CPU Only")"
 print_table_row "ONNX Runtime GPU" "$([[ $ONNX_OK -eq 1 ]] && echo "✓ Accelerated" || echo "⚠ CPU Only")"
 print_table_row "TensorRT" "$([[ $TRT_OK -eq 1 ]] && echo "✓ Available" || echo "⚠ Missing")"
-print_table_row "YOLO Inference" "$([[ $YOLO_OK -eq 1 ]] && echo "✓ GPU ($YOLO_FPS FPS)" || echo "⚠ CPU Only")"
+print_table_row "YOLO Inference(yolov8)" "$([[ $YOLO_OK -eq 1 ]] && echo "✓ GPU ($YOLO_FPS FPS)" || echo "⚠ CPU Only")"
 print_table_row "GStreamer NVIDIA" "$([[ $GST_OK -eq 1 ]] && echo "✓ Available" || echo "⚠ Missing")"
 print_table_row "Video Encoding" "$([[ $VENC_OK -eq 1 ]] && echo "✓ Working" || echo "⚠ Not available")"
 print_table_row "Video Decoding" "$([[ $VDEC_OK -eq 1 ]] && echo "✓ Working" || echo "⚠ Not available")"
