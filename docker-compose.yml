@@ -47,34 +47,7 @@ services:
       - seccomp:unconfined
     tty: true
     stdin_open: true  
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - |
-        if [ ! -f /tmp/.advantech_initialized ]; then
-          echo "════════════════════════════════════════════════════════════════"
-          echo "  First-time initialization - Installing ONNX Runtime GPU..."
-          echo "════════════════════════════════════════════════════════════════"
-          if [ -f /advantech/init.sh ]; then
-            chmod +x /advantech/init.sh
-            /advantech/init.sh --force
-            if [ $? -eq 0 ]; then
-              touch /tmp/.advantech_initialized
-              echo "════════════════════════════════════════════════════════════════"
-              echo "  Initialization complete! Container is ready."
-              echo "════════════════════════════════════════════════════════════════"
-            else
-              echo "════════════════════════════════════════════════════════════════"
-              echo "  WARNING: init.sh failed. Run manually: ./init.sh --force"
-              echo "════════════════════════════════════════════════════════════════"
-            fi
-          else
-            echo "WARNING: init.sh not found at /advantech/init.sh"
-          fi
-        else
-          echo "Environment already initialized. Skipping init.sh"
-        fi
-        exec /bin/bash
-
+    entrypoint: ["/bin/bash"]
     labels:
       maintainer: "Samir Singh <samir.singh@advantech.com>"
       vendor: "Advantech Corporation"
@@ -195,3 +168,4 @@ services:
 # 5. For CSI cameras, use nvarguscamerasrc:
 #    gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! nvvidconv ! xvimagesink
 # ==========================================================================
+
