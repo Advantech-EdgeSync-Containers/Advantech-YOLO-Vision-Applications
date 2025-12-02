@@ -198,9 +198,9 @@ connect_to_container() {
     echo -e "${GREEN}║  GPU Support: Enabled                                          ║${NC}"
     echo -e "${GREEN}║  Working Directory: /advantech                                 ║${NC}"
     echo -e "${GREEN}║  Mounted Volumes:                                              ║${NC}"
-    echo -e "${GREEN}║    ./src → /app/src                                            ║${NC}"
-    echo -e "${GREEN}║    ./models → /app/models                                      ║${NC}"
-    echo -e "${GREEN}║    ./data → /app/data                                          ║${NC}"
+    echo -e "${GREEN}║    ./src → /advantech/src                                      ║${NC}"
+    echo -e "${GREEN}║    ./models → /advantech/models                                ║${NC}"
+    echo -e "${GREEN}║    ./data → /advantech/data                                    ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo
     exec docker exec -it "${CONTAINER_NAME}" bash
