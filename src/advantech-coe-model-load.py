@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-
 # ==========================================================================
 # YOLO Model Downloader for Advantech Devices
 # ==========================================================================
-# Version:      2.6.0
+# Version:      2.0.0
 # Author:       Samir Singh <samir.singh@advantech.com> and Apoorv Saxena<apoorv.saxena@advantech.com>
 # Created:      February 8, 2025
-# Last Updated: May 15, 2025
+# Last Updated: Dec 03, 2025
 # 
 # Description:
 #   This utility detects Advantech device capabilities and provides
@@ -29,15 +28,22 @@
 # Copyright (c) 2025 Advantech Corporation. All rights reserved.
 # ==========================================================================
 
-import sys
+__title__ = "Advantech YOLO Model Loader"
+__author__ = "Advantech Co. Ltd"
+__copyright__ = "Copyright (c) 2024-2025 Advantech Corporation. All Rights Reserved."
+__license__ = "Proprietary - Advantech Corporation"
+__version__ = "2.0.0"
+__build_date__ = "2025-12-03"
+__maintainer__ = "Samir Singh"
+
 import os
+import sys
+import re
+import time
 import argparse
 import subprocess
-import time
-import platform
-import glob
-import shutil
-from collections import OrderedDict
+from pathlib import Path
+
 
 class Colors:
     HEADER = '\033[95m'
@@ -49,565 +55,598 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-    BG_BLUE = '\033[44m'
 
-def print_header(text, width=80):
-    print(f"\n{Colors.BG_BLUE}{Colors.BOLD}{text.center(width)}{Colors.ENDC}")
 
-def print_subheader(text):
-    print(f"\n{Colors.BOLD}{Colors.YELLOW}{text}{Colors.ENDC}")
+def print_banner():
+    banner = f"""
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║     █████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗███████╗ ██████╗██╗  ██╗  ║
+║    ██╔══██╗██╔══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██╔════╝██╔════╝██║  ██║  ║
+║    ███████║██║  ██║╚██╗ ██╔╝███████║██╔██╗ ██║   ██║   █████╗  ██║     ███████║  ║
+║    ██╔══██║██║  ██║ ╚████╔╝ ██╔══██║██║╚██╗██║   ██║   ██╔══╝  ██║     ██╔══██║  ║
+║    ██║  ██║██████╔╝  ╚██╔╝  ██║  ██║██║ ╚████║   ██║   ███████╗╚██████╗██║  ██║  ║
+║    ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝  ║
+║                          YOLO Model Loader v{__version__}                              ║
+╠══════════════════════════════════════════════════════════════════════════════════╣
+║  Author: {__author__:<18}  Build: {__build_date__:<14}                               ║
+╠══════════════════════════════════════════════════════════════════════════════════╣
+║  {__copyright__}             ║
+╚══════════════════════════════════════════════════════════════════════════════════╝"""
+    print(banner)
 
-def print_success(text):
-    print(f"{Colors.GREEN}✓ {text}{Colors.ENDC}")
-
-def print_error(text):
-    print(f"{Colors.RED}✗ {text}{Colors.ENDC}")
 
 def print_info(text):
     print(f"{Colors.CYAN}ℹ {text}{Colors.ENDC}")
 
-def print_warning(text):
-    print(f"{Colors.YELLOW}⚠ {text}{Colors.ENDC}")
 
-def print_progress(text):
-    print(f"{Colors.BLUE}→ {text}{Colors.ENDC}")
+def print_success(text):
+    print(f"{Colors.GREEN}✓ {text}{Colors.ENDC}")
 
-def run_command(cmd, shell=False):
-    try:
-        if shell:
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, universal_newlines=True)
-        else:
-            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, universal_newlines=True)
-        return output.strip()
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.output.strip()}"
-    except Exception as e:
-        return f"Error: {str(e)}"
 
-def detect_advantech_device():
+def print_error(text):
+    print(f"{Colors.RED}✗ {text}{Colors.ENDC}")
+
+
+def detect_device():
+    """Detect Jetson/Advantech device with accurate hardware information."""
     device_info = {
-        "model_type": "Unknown Advantech Device",
-        "product_name": "Unknown",
-        "memory_gb": 0,
-        "cuda_cores": 0,
+        "model": "Unknown Device",
+        "product": "Not Specified",
+        "vendor": "Unknown",
+        "version": "Not Specified",
+        "os": "Unknown",
         "architecture": "Unknown",
         "compute_capability": "Unknown",
-        "board_details": {}
+        "cuda_cores": 0,
+        "memory_gb": 0,
+        "jetpack_version": "Unknown",
+        "l4t_version": "Unknown",
+        "nvidia_info": "",
+        "is_jetson": False,
+        "is_advantech": False,
+        "base_platform": "Unknown",
     }
-    try:
-        if os.path.exists('/sys/class/dmi/id/board_vendor'):
-            with open('/sys/class/dmi/id/board_vendor', 'r') as f:
-                board_vendor = f.read().strip()
-                device_info["board_details"]["vendor"] = board_vendor
-        if os.path.exists('/sys/class/dmi/id/board_name'):
-            with open('/sys/class/dmi/id/board_name', 'r') as f:
-                board_name = f.read().strip()
-                device_info["board_details"]["name"] = board_name
-                device_info["product_name"] = board_name
-        if os.path.exists('/sys/class/dmi/id/product_name'):
-            with open('/sys/class/dmi/id/product_name', 'r') as f:
-                product_name = f.read().strip()
-                device_info["board_details"]["product_name"] = product_name
-                if not device_info["product_name"] or device_info["product_name"] == "Unknown":
-                    device_info["product_name"] = product_name
-        if os.path.exists('/sys/class/dmi/id/product_version'):
-            with open('/sys/class/dmi/id/product_version', 'r') as f:
-                product_version = f.read().strip()
-                device_info["board_details"]["product_version"] = product_version
-        is_advantech = False
-        if device_info["board_details"].get("vendor", "").lower().find("advantech") >= 0:
-            is_advantech = True
-        elif device_info["board_details"].get("name", "").lower().find("advantech") >= 0:
-            is_advantech = True
-        elif device_info["board_details"].get("product_name", "").lower().find("advantech") >= 0:
-            is_advantech = True
-        if is_advantech:
-            device_info["model_type"] = "Advantech Industrial Computer"
-            model_identifiers = [
-                device_info["board_details"].get("name", ""),
-                device_info["board_details"].get("product_name", ""),
-                device_info["product_name"]
-            ]
-            for identifier in model_identifiers:
-                if identifier and identifier != "Unknown":
-                    device_info["model_type"] = f"Advantech {identifier}"
-                    break
-    except Exception as e:
-        print_warning(f"Error reading board vendor information: {e}")
-    if not is_advantech:
-        jetpack_info = "Unknown"
-        if os.path.exists('/etc/nv_tegra_release'):
-            try:
-                with open('/etc/nv_tegra_release', 'r') as f:
-                    jetpack_info = f.read().strip()
-                    device_info["jetpack_info"] = jetpack_info
-                    if "t186ref" in jetpack_info:
-                        device_info["model_type"] = "Advantech Xavier-based AIE"
-                        device_info["memory_gb"] = 16
-                        device_info["cuda_cores"] = 512
-                        device_info["architecture"] = "Volta"
-                        device_info["compute_capability"] = "7.2"
-                    elif "t194ref" in jetpack_info:
-                        device_info["model_type"] = "Advantech Xavier NX-based AIE"
-                        device_info["memory_gb"] = 8
-                        device_info["cuda_cores"] = 384
-                        device_info["architecture"] = "Volta"
-                        device_info["compute_capability"] = "7.2"
-                    elif "t234ref" in jetpack_info:
-                        device_info["architecture"] = "Ampere"
-                        device_info["compute_capability"] = "8.7"
-                        total_memory_kb = 0
-                        try:
-                            with open('/proc/meminfo', 'r') as f:
-                                for line in f:
-                                    if 'MemTotal' in line:
-                                        total_memory_kb = int(line.split()[1])
-                                        break
-                            total_memory_gb = total_memory_kb / 1024 / 1024
-                            device_info["memory_gb"] = round(total_memory_gb)
-                            if total_memory_gb > 25:
-                                device_info["model_type"] = "Advantech Orin AGX-based AIE"
-                                device_info["cuda_cores"] = 2048
-                            elif total_memory_gb > 14:
-                                device_info["model_type"] = "Advantech Orin NX 16GB-based AIE"
-                                device_info["cuda_cores"] = 1024
-                            elif total_memory_gb > 7:
-                                device_info["model_type"] = "Advantech Orin NX 8GB-based AIE"
-                                device_info["cuda_cores"] = 1024
-                            else:
-                                device_info["model_type"] = "Advantech Orin Nano-based AIE"
-                                device_info["cuda_cores"] = 512
-                        except:
-                            device_info["model_type"] = "Advantech Orin-based AIE"
-                            device_info["cuda_cores"] = 1024
-            except:
-                pass
+    
+    # Get OS info
     try:
         if os.path.exists('/etc/os-release'):
             with open('/etc/os-release', 'r') as f:
-                os_release = f.read()
-                for line in os_release.split('\n'):
+                for line in f:
                     if line.startswith('PRETTY_NAME='):
-                        os_name = line.split('=')[1].strip('"\'')
-                        device_info["board_details"]["os"] = os_name
+                        device_info["os"] = line.split('=')[1].strip().strip('"')
                         break
     except:
         pass
+    
+    # Read device tree model
+    dt_model = None
     try:
-        cpu_info = run_command("cat /proc/cpuinfo")
-        cpu_model = ""
-        core_count = 0
-        for line in cpu_info.split('\n'):
-            if "model name" in line:
-                cpu_model = line.split(': ')[1]
-                core_count += 1
-        if cpu_model:
-            device_info["board_details"]["cpu_model"] = cpu_model
-            device_info["board_details"]["cpu_cores"] = core_count
+        if os.path.exists('/proc/device-tree/model'):
+            with open('/proc/device-tree/model', 'r') as f:
+                dt_model = f.read().strip().replace('\x00', '')
+                device_info["product"] = dt_model
     except:
         pass
+    
+    # Parse L4T/JetPack version and get tegra board type
+    l4t_major = None
+    l4t_revision = None
+    tegra_board = None
+    
     try:
-        cuda_output = run_command("nvcc --version")
-        if "release" in cuda_output:
-            cuda_version = cuda_output.split("release")[1].split(",")[0].strip()
-            device_info["cuda_version"] = cuda_version
-    except:
-        device_info["cuda_version"] = "Not found"
-    try:
-        mem_info = run_command("free -m")
-        mem_lines = mem_info.split('\n')
-        if len(mem_lines) > 1:
-            mem_values = mem_lines[1].split()
-            if len(mem_values) >= 3:
-                device_info["memory"] = {
-                    "total": int(mem_values[1]),
-                    "free": int(mem_values[3])
-                }
+        if os.path.exists('/etc/nv_tegra_release'):
+            with open('/etc/nv_tegra_release', 'r') as f:
+                release_info = f.read().strip()
+                device_info["nvidia_info"] = release_info
+                
+                match = re.search(r'R(\d+)\s*\(release\),\s*REVISION:\s*([\d.]+)', release_info)
+                if match:
+                    l4t_major = int(match.group(1))
+                    l4t_revision = match.group(2)
+                    device_info["l4t_version"] = f"R{l4t_major}.{l4t_revision}"
+                
+                if "t234ref" in release_info:
+                    tegra_board = "t234"
+                elif "t194ref" in release_info:
+                    tegra_board = "t194"
+                elif "t186ref" in release_info:
+                    tegra_board = "t186"
+                elif "t210ref" in release_info:
+                    tegra_board = "t210"
     except:
         pass
-    return device_info
-
-def detect_available_libraries():
-    libraries = {
-        "ultralytics": {"installed": False, "version": None},
-        "numpy": {"installed": False, "version": None, "has_bitgenerator": False},
-        "torch": {"installed": False, "version": None, "cuda": False},
-        "torchvision": {"installed": False, "version": None},
-        "onnx": {"installed": False, "version": None},
-        "onnxruntime": {"installed": False, "version": None},
-        "tensorrt": {"installed": False, "version": None},
-        "cv2": {"installed": False, "version": None},
-        "PIL": {"installed": False, "version": None},
-    }
-    for lib_name in libraries:
+    
+    # Try dpkg for L4T version
+    if l4t_major is None:
         try:
-            if lib_name == "numpy":
-                import numpy as np
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = np.__version__
-                libraries[lib_name]["has_bitgenerator"] = hasattr(np.random, 'BitGenerator')
-            elif lib_name == "torch":
-                import torch
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = torch.__version__
-                libraries[lib_name]["cuda"] = torch.cuda.is_available()
-                if torch.cuda.is_available():
-                    libraries[lib_name]["device_name"] = torch.cuda.get_device_name(0)
-            elif lib_name == "torchvision":
-                import torchvision
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = torchvision.__version__
-            elif lib_name == "onnx":
-                import onnx
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = onnx.__version__
-            elif lib_name == "onnxruntime":
-                import onnxruntime
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = onnxruntime.__version__
-            elif lib_name == "tensorrt":
-                import tensorrt
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = tensorrt.__version__
-            elif lib_name == "cv2":
-                import cv2
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = cv2.__version__
-            elif lib_name == "PIL":
-                from PIL import Image
-                import PIL
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = PIL.__version__
-            elif lib_name == "ultralytics":
-                import ultralytics
-                libraries[lib_name]["installed"] = True
-                libraries[lib_name]["version"] = ultralytics.__version__
+            result = subprocess.run(
+                ['dpkg-query', '-W', '-f=${Version}', 'nvidia-l4t-core'],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                version_str = result.stdout.strip()
+                match = re.match(r'(\d+)\.(\d+)\.(\d+)', version_str)
+                if match:
+                    l4t_major = int(match.group(1))
+                    l4t_revision = f"{match.group(2)}.{match.group(3)}"
+                    device_info["l4t_version"] = f"R{l4t_major}.{l4t_revision}"
         except:
             pass
-    return libraries
-
-def get_recommended_models(device_info):
-    recommendations = {
-        "detection": {"recommended": "", "max_size": "", "options": []},
-        "segmentation": {"recommended": "", "max_size": "", "options": []},
-        "classification": {"recommended": "", "max_size": "", "options": []},
-    }
-    if "Orin" in device_info["model_type"]:
-        if "AGX" in device_info["model_type"]:
-            for task in recommendations:
-                recommendations[task]["recommended"] = "m"
-                recommendations[task]["max_size"] = "l"
-                recommendations[task]["options"] = ["n", "s", "m", "l"]
-        elif "NX" in device_info["model_type"]:
-            for task in recommendations:
-                recommendations[task]["recommended"] = "s"
-                recommendations[task]["max_size"] = "m"
-                recommendations[task]["options"] = ["n", "s", "m"]
+    
+    # Map L4T to JetPack version
+    if l4t_major:
+        jetpack_map = {
+            (36, '4.0'): '6.1', (36, '3.0'): '6.0 GA', (36, '2.0'): '6.0 DP',
+            (35, '6.0'): '5.1.4', (35, '5.0'): '5.1.3', (35, '4.1'): '5.1.2',
+            (35, '3.1'): '5.1.1', (35, '2.1'): '5.1', (35, '1.0'): '5.0.2',
+            (34, '1.1'): '5.0.1 DP', (34, '1.0'): '5.0 DP',
+            (32, '7.4'): '4.6.4', (32, '7.3'): '4.6.3', (32, '7.2'): '4.6.2',
+            (32, '7.1'): '4.6.1', (32, '6.1'): '4.6', (32, '5.2'): '4.5.1',
+        }
+        jp = jetpack_map.get((l4t_major, l4t_revision))
+        if jp:
+            device_info["jetpack_version"] = jp
+        elif l4t_major >= 36:
+            device_info["jetpack_version"] = "6.x"
+        elif l4t_major >= 35:
+            device_info["jetpack_version"] = "5.1.x"
+        elif l4t_major >= 34:
+            device_info["jetpack_version"] = "5.0.x"
+        elif l4t_major >= 32:
+            device_info["jetpack_version"] = "4.x"
+    
+    # Determine device model from device tree OR tegra board
+    if dt_model and "Orin" in dt_model:
+        device_info["is_jetson"] = True
+        device_info["architecture"] = "Ampere"
+        device_info["compute_capability"] = "8.7"
+        device_info["base_platform"] = "Orin"
+        if "AGX" in dt_model:
+            device_info["model"] = "NVIDIA Jetson AGX Orin"
+            device_info["cuda_cores"] = 2048
+        elif "NX" in dt_model:
+            device_info["model"] = "NVIDIA Jetson Orin NX"
+            device_info["cuda_cores"] = 1024
+        elif "Nano" in dt_model:
+            device_info["model"] = "NVIDIA Jetson Orin Nano"
+            device_info["cuda_cores"] = 1024
         else:
-            for task in recommendations:
-                recommendations[task]["recommended"] = "s"
-                recommendations[task]["max_size"] = "s"
-                recommendations[task]["options"] = ["n", "s"]
-    elif "Xavier" in device_info["model_type"]:
-        if "AGX" in device_info["model_type"]:
-            for task in recommendations:
-                recommendations[task]["recommended"] = "s"
-                recommendations[task]["max_size"] = "m"
-                recommendations[task]["options"] = ["n", "s", "m"]
+            device_info["model"] = "NVIDIA Jetson Orin"
+            device_info["cuda_cores"] = 1024
+    
+    elif dt_model and "Xavier" in dt_model:
+        device_info["is_jetson"] = True
+        device_info["architecture"] = "Volta"
+        device_info["compute_capability"] = "7.2"
+        device_info["base_platform"] = "Xavier"
+        if "AGX" in dt_model:
+            device_info["model"] = "NVIDIA Jetson AGX Xavier"
+            device_info["cuda_cores"] = 512
+        elif "NX" in dt_model:
+            device_info["model"] = "NVIDIA Jetson Xavier NX"
+            device_info["cuda_cores"] = 384
         else:
-            for task in recommendations:
-                recommendations[task]["recommended"] = "n"
-                recommendations[task]["max_size"] = "s"
-                recommendations[task]["options"] = ["n", "s"]
-    else:
-        for task in recommendations:
-            recommendations[task]["recommended"] = "n"
-            recommendations[task]["max_size"] = "n"
-            recommendations[task]["options"] = ["n"]
-    model_options = []
-    option_id = 1
-    for task, info in recommendations.items():
-        if info["recommended"]:
-            size = info["recommended"]
-            if task == "detection":
-                model_name = f"yolov8{size}.pt"
-            elif task == "segmentation":
-                model_name = f"yolov8{size}-seg.pt"
-            elif task == "classification":
-                model_name = f"yolov8{size}-cls.pt"
-            else:
-                continue
-            option = {
-                "id": option_id,
-                "name": f"YOLOv8{size} {task.capitalize()}",
-                "model_name": model_name,
-                "task": task,
-                "size": size,
-                "recommended": True,
-                "description": f"Recommended {task} model for {device_info['model_type']}"
-            }
-            model_options.append(option)
-            option_id += 1
-    for task, info in recommendations.items():
-        for size in info["options"]:
-            if size == info["recommended"]:
-                continue
-            if task == "detection":
-                model_name = f"yolov8{size}.pt"
-            elif task == "segmentation":
-                model_name = f"yolov8{size}-seg.pt"
-            elif task == "classification":
-                model_name = f"yolov8{size}-cls.pt"
-            else:
-                continue
-            option = {
-                "id": option_id,
-                "name": f"YOLOv8{size} {task.capitalize()}",
-                "model_name": model_name,
-                "task": task,
-                "size": size,
-                "recommended": False,
-                "description": f"Alternative {task} model for {device_info['model_type']}"
-            }
-            model_options.append(option)
-            option_id += 1
-    return model_options
+            device_info["model"] = "NVIDIA Jetson Xavier"
+            device_info["cuda_cores"] = 512
+    
+    elif dt_model and "TX2" in dt_model:
+        device_info["is_jetson"] = True
+        device_info["model"] = "NVIDIA Jetson TX2"
+        device_info["architecture"] = "Pascal"
+        device_info["compute_capability"] = "6.2"
+        device_info["cuda_cores"] = 256
+        device_info["base_platform"] = "TX2"
+    
+    elif dt_model and "Nano" in dt_model and "Orin" not in dt_model:
+        device_info["is_jetson"] = True
+        device_info["model"] = "NVIDIA Jetson Nano"
+        device_info["architecture"] = "Maxwell"
+        device_info["compute_capability"] = "5.3"
+        device_info["cuda_cores"] = 128
+        device_info["base_platform"] = "Nano"
+    
+    elif dt_model and "Thor" in dt_model:
+        device_info["is_jetson"] = True
+        device_info["model"] = "NVIDIA Thor"
+        device_info["architecture"] = "Ampere"
+        device_info["compute_capability"] = "8.7"
+        device_info["cuda_cores"] = 2048
+        device_info["base_platform"] = "Thor"
+    
+    elif tegra_board:
+        device_info["is_jetson"] = True
+        if tegra_board == "t234":
+            device_info["model"] = "NVIDIA Jetson Orin"
+            device_info["architecture"] = "Ampere"
+            device_info["compute_capability"] = "8.7"
+            device_info["cuda_cores"] = 1024
+            device_info["base_platform"] = "Orin"
+        elif tegra_board == "t194":
+            device_info["model"] = "NVIDIA Jetson Xavier"
+            device_info["architecture"] = "Volta"
+            device_info["compute_capability"] = "7.2"
+            device_info["cuda_cores"] = 384
+            device_info["base_platform"] = "Xavier"
+        elif tegra_board == "t186":
+            device_info["model"] = "NVIDIA Jetson TX2"
+            device_info["architecture"] = "Pascal"
+            device_info["compute_capability"] = "6.2"
+            device_info["cuda_cores"] = 256
+            device_info["base_platform"] = "TX2"
+        elif tegra_board == "t210":
+            device_info["model"] = "NVIDIA Jetson Nano"
+            device_info["architecture"] = "Maxwell"
+            device_info["compute_capability"] = "5.3"
+            device_info["cuda_cores"] = 128
+            device_info["base_platform"] = "Nano"
+    
+    # Check for Advantech branding
+    try:
+        if os.path.exists('/sys/class/dmi/id/board_vendor'):
+            with open('/sys/class/dmi/id/board_vendor', 'r') as f:
+                vendor = f.read().strip()
+                device_info["vendor"] = vendor
+                if "Advantech" in vendor:
+                    device_info["is_advantech"] = True
+                    base = device_info["base_platform"]
+                    device_info["model"] = f"Advantech {base}-based AIE"
+        
+        if os.path.exists('/sys/class/dmi/id/product_version'):
+            with open('/sys/class/dmi/id/product_version', 'r') as f:
+                device_info["version"] = f.read().strip() or "Not Specified"
+    except:
+        pass
+    
+    # Get GPU memory
+    try:
+        import torch
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            device_info["memory_gb"] = round(props.total_memory / (1024**3))
+            cap = torch.cuda.get_device_capability(0)
+            if device_info["compute_capability"] == "Unknown":
+                device_info["compute_capability"] = f"{cap[0]}.{cap[1]}"
+    except:
+        pass
+    
+    if device_info["memory_gb"] == 0:
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                mem_mb = int(result.stdout.strip().split('\n')[0])
+                device_info["memory_gb"] = round(mem_mb / 1024)
+        except:
+            pass
+    
+    return device_info
 
-def display_device_info(device_info):
-    print_subheader("Detected Advantech Device")
-    print(f"Model: {Colors.BOLD}{device_info['model_type']}{Colors.ENDC}")
-    if device_info.get("product_name") and device_info['product_name'] != "Unknown":
-        print(f"Product: {device_info['product_name']}")
-    if device_info.get("board_details"):
-        board_details = device_info["board_details"]
-        if board_details.get("vendor"):
-            print(f"Vendor: {board_details['vendor']}")
-        if board_details.get("name") and board_details['name'] != device_info.get('product_name', ''):
-            print(f"Board: {board_details['name']}")
-        if board_details.get("product_version"):
-            print(f"Version: {board_details['product_version']}")
-        if board_details.get("os"):
-            print(f"OS: {board_details['os']}")
-        if board_details.get("cpu_model"):
-            print(f"CPU: {board_details['cpu_model']} ({board_details.get('cpu_cores', 'Unknown')} cores)")
-    if device_info.get("architecture") and device_info["architecture"] != "Unknown":
-        print(f"GPU Architecture: {device_info['architecture']}")
-        print(f"CUDA Cores: {device_info['cuda_cores']}")
-        print(f"Compute Capability: {device_info['compute_capability']}")
-    if device_info.get("memory") and device_info["memory"].get("total"):
-        print(f"Memory: {device_info['memory']['total']} MB total, {device_info['memory']['free']} MB free")
-    elif device_info.get("memory_gb"):
-        print(f"Memory: {device_info['memory_gb']} GB")
-    if device_info.get("cuda_version"):
-        print(f"CUDA Version: {device_info['cuda_version']}")
-    if device_info.get("jetpack_info"):
-        print(f"NVIDIA System Info: {device_info['jetpack_info']}")
-    if "Orin" in device_info["model_type"]:
-        print_info("This Advantech device is based on NVIDIA Orin - optimal for YOLOv8m/s models")
-    elif "Xavier" in device_info["model_type"]:
-        print_info("This Advantech device is based on NVIDIA Xavier - optimal for YOLOv8s/n models")
-    else:
-        if device_info.get("cuda_cores", 0) > 0:
-            print_info("This Advantech device has CUDA capabilities - YOLOv8n/s models recommended")
-        else:
-            print_info("Limited or no CUDA capabilities detected - YOLOv8n model recommended")
 
-def display_library_info(libraries):
-    print_subheader("Detected Libraries")
-    headers = ["Library", "Status", "Version", "Notes"]
-    rows = []
-    for lib_name, info in libraries.items():
-        if info["installed"]:
-            status = f"{Colors.GREEN}Installed{Colors.ENDC}"
-            version = info["version"]
-            notes = ""
-            if lib_name == "numpy":
-                notes = f"{Colors.GREEN}Compatible{Colors.ENDC}" if info["has_bitgenerator"] else f"{Colors.RED}Missing BitGenerator{Colors.ENDC}"
-            elif lib_name == "torch":
-                notes = f"{Colors.GREEN}CUDA Available{Colors.ENDC}" if info.get("cuda", False) else f"{Colors.YELLOW}CPU Only{Colors.ENDC}"
-        else:
-            status = f"{Colors.RED}Not Installed{Colors.ENDC}"
-            version = "N/A"
-            notes = ""
-        rows.append([lib_name, status, version, notes])
-    print(format_table(headers, rows))
-
-def display_model_options(model_options):
-    print_subheader("YOLOv8 Models for Your Device")
-    for option in model_options:
-        if option["recommended"]:
-            print(f"{Colors.BOLD}{Colors.GREEN}[{option['id']}] {option['name']} (RECOMMENDED){Colors.ENDC}")
-        else:
-            print(f"{Colors.BOLD}[{option['id']}] {option['name']}{Colors.ENDC}")
-        print(f"    Model: {option['model_name']}")
-        print(f"    Task: {option['task']}")
-        print(f"    Size: {option['size']}")
-        print(f"    {option['description']}")
-        print()
-
-def format_table(headers, rows, widths=None):
-    if not widths:
-        widths = [max(len(str(row[i])) for row in rows + [headers]) for i in range(len(headers))]
-    table = f"{Colors.BOLD}"
-    for i, header in enumerate(headers):
-        table += f" {header.ljust(widths[i])} "
-        if i < len(headers) - 1:
-            table += "|"
-    table += f"{Colors.ENDC}\n"
-    table += "-" * (sum(widths) + len(headers) * 3 - 1) + "\n"
-    for row in rows:
-        for i, cell in enumerate(row):
-            table += f" {str(cell).ljust(widths[i])} "
-            if i < len(row) - 1:
-                table += "|"
-        table += "\n"
-    return table
-
-def download_model(model_name):
-    print_progress(f"Downloading {model_name}...")
+def detect_libraries():
+    """Detect installed libraries and their versions."""
+    libraries = {}
+    
     try:
         import ultralytics
+        libraries["ultralytics"] = {"installed": True, "version": ultralytics.__version__, "notes": ""}
+    except:
+        libraries["ultralytics"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import numpy as np
+        libraries["numpy"] = {"installed": True, "version": np.__version__, "notes": f"{Colors.GREEN}Compatible{Colors.ENDC}"}
+    except:
+        libraries["numpy"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import torch
+        cuda_status = f"{Colors.GREEN}CUDA Available{Colors.ENDC}" if torch.cuda.is_available() else f"{Colors.YELLOW}CPU Only{Colors.ENDC}"
+        libraries["torch"] = {"installed": True, "version": torch.__version__, "notes": cuda_status}
+    except:
+        libraries["torch"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import torchvision
+        libraries["torchvision"] = {"installed": True, "version": torchvision.__version__, "notes": ""}
+    except:
+        libraries["torchvision"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import onnx
+        libraries["onnx"] = {"installed": True, "version": onnx.__version__, "notes": ""}
+    except:
+        libraries["onnx"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        notes = f"{Colors.GREEN}GPU Available{Colors.ENDC}" if 'CUDAExecutionProvider' in providers else f"{Colors.YELLOW}CPU Only{Colors.ENDC}"
+        libraries["onnxruntime"] = {"installed": True, "version": ort.__version__, "notes": notes}
+    except:
+        libraries["onnxruntime"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import tensorrt as trt
+        libraries["tensorrt"] = {"installed": True, "version": trt.__version__, "notes": ""}
+    except:
+        libraries["tensorrt"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import cv2
+        libraries["cv2"] = {"installed": True, "version": cv2.__version__, "notes": ""}
+    except:
+        libraries["cv2"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    try:
+        import PIL
+        libraries["PIL"] = {"installed": True, "version": PIL.__version__, "notes": ""}
+    except:
+        libraries["PIL"] = {"installed": False, "version": "N/A", "notes": ""}
+    
+    return libraries
+
+
+def display_device_info(device_info):
+    """Display detected device information."""
+    header = "Detected Advantech Device" if device_info["is_advantech"] else "Detected Device"
+    print(f"{Colors.BOLD}{header}{Colors.ENDC}")
+    
+    print(f"Model: {device_info['model']}")
+    print(f"Product: {device_info['product']}")
+    print(f"Vendor: {device_info['vendor']}")
+    print(f"Version: {device_info['version']}")
+    print(f"OS: {device_info['os']}")
+    print(f"GPU Architecture: {device_info['architecture']}")
+    print(f"CUDA Cores: {device_info['cuda_cores']}")
+    print(f"Compute Capability: {device_info['compute_capability']}")
+    print(f"Memory: {device_info['memory_gb']} GB")
+    
+    if device_info.get("nvidia_info"):
+        print(f"NVIDIA System Info: {device_info['nvidia_info']}")
+    
+    base = device_info.get("base_platform", "Unknown")
+    prefix = "Advantech " if device_info['is_advantech'] else ""
+    if base == "Orin":
+        print_info(f"This {prefix}device is based on NVIDIA Orin - optimal for YOLOv8m/s/n models")
+    elif base == "Xavier":
+        print_info(f"This {prefix}device is based on NVIDIA Xavier - optimal for YOLOv8s/n models")
+    elif base == "TX2":
+        print_info(f"This {prefix}device is based on NVIDIA TX2 - optimal for YOLOv8n models")
+    elif base == "Nano":
+        print_info(f"This {prefix}device is based on NVIDIA Nano - optimal for YOLOv8n models")
+
+
+def display_libraries(libraries):
+    """Display detected libraries in a table."""
+    print(f"{Colors.BOLD}Detected Libraries{Colors.ENDC}")
+    
+    # Calculate column widths
+    col_widths = [11, 18, 24, 24]
+    
+    # Header
+    headers = ["Library", "Status", "Version", "Notes"]
+    header_line = f"{Colors.BOLD}"
+    for i, h in enumerate(headers):
+        header_line += f" {h.ljust(col_widths[i])} |"
+    header_line = header_line.rstrip('|') + f"{Colors.ENDC}"
+    print(header_line)
+    
+    # Separator
+    print("-" * 87)
+    
+    # Rows
+    for lib, info in libraries.items():
+        status = f"{Colors.GREEN}Installed{Colors.ENDC}" if info["installed"] else f"{Colors.RED}Not Installed{Colors.ENDC}"
+        
+        # Calculate padding accounting for ANSI codes
+        lib_pad = col_widths[0] - len(lib)
+        status_clean = re.sub(r'\033\[[0-9;]*m', '', status)
+        status_pad = col_widths[1] - len(status_clean)
+        version_pad = col_widths[2] - len(info["version"])
+        notes_clean = re.sub(r'\033\[[0-9;]*m', '', info["notes"])
+        notes_pad = col_widths[3] - len(notes_clean)
+        
+        print(f" {lib}{' ' * lib_pad} | {status}{' ' * status_pad} | {info['version']}{' ' * version_pad} | {info['notes']}{' ' * notes_pad} ")
+
+
+def get_model_options(device_info):
+    """Get model options based on device capabilities."""
+    memory = device_info.get("memory_gb", 4)
+    model_name = device_info.get("model", "Unknown Device")
+    
+    # Determine available sizes and recommendations based on memory
+    if memory >= 16:
+        sizes = ['n', 's', 'm', 'l']
+        recommended = ['n', 's']
+    elif memory >= 8:
+        sizes = ['n', 's', 'm']
+        recommended = ['n', 's']
+    elif memory >= 4:
+        sizes = ['n', 's']
+        recommended = ['n']
+    else:
+        sizes = ['n']
+        recommended = ['n']
+    
+    options = []
+    option_id = 1
+    tasks = ['detection', 'segmentation', 'classification']
+    
+    # Group by size first, then by task (n-det, n-seg, n-cls, s-det, s-seg, s-cls, ...)
+    for size in sizes:
+        for task in tasks:
+            if task == 'detection':
+                model_file = f"yolov8{size}.pt"
+            elif task == 'segmentation':
+                model_file = f"yolov8{size}-seg.pt"
+            else:
+                model_file = f"yolov8{size}-cls.pt"
+            
+            is_recommended = size in recommended
+            desc = f"Recommended {task} model for {model_name}" if is_recommended else f"Alternative {task} model for {model_name}"
+            
+            options.append({
+                "id": option_id,
+                "model": model_file,
+                "task": task,
+                "size": size,
+                "recommended": is_recommended,
+                "description": desc
+            })
+            option_id += 1
+    
+    return options
+
+
+def display_model_options(options):
+    """Display available model options."""
+    print(f"{Colors.BOLD}YOLOv8 Models for Your Device{Colors.ENDC}")
+    
+    for opt in options:
+        if opt["recommended"]:
+            print(f"{Colors.GREEN}[{opt['id']}] YOLOv8{opt['size']} {opt['task'].capitalize()} (RECOMMENDED){Colors.ENDC}")
+        else:
+            print(f"[{opt['id']}] YOLOv8{opt['size']} {opt['task'].capitalize()}")
+        
+        print(f"    Model: {opt['model']}")
+        print(f"    Task: {opt['task']}")
+        print(f"    Size: {opt['size']}")
+        print(f"    {opt['description']}")
+
+
+def load_model(model_path):
+    """Load a YOLO model."""
+    try:
         from ultralytics import YOLO
-        if os.path.exists(model_name):
-            print_info(f"Model {model_name} already exists locally")
-            try:
-                model = YOLO(model_name)
-                print_success(f"Successfully loaded existing model: {model_name}")
-                print_info(f"Model location: {os.path.abspath(model_name)}")
-                return model
-            except Exception as e:
-                print_warning(f"Found existing model file but it seems invalid: {e}")
-                print_info("Will attempt to download a fresh copy")
-        start_time = time.time()
-        model = YOLO(model_name)
-        end_time = time.time()
-        print_success(f"Model {model_name} downloaded successfully in {end_time - start_time:.2f} seconds")
-        print_info(f"Model saved to: {os.path.abspath(model_name)}")
+    except ImportError:
+        print_error("ultralytics not installed. Run: pip install ultralytics")
+        return None
+    
+    print(f"\n{Colors.CYAN}Loading model: {model_path}...{Colors.ENDC}")
+    
+    if not os.path.exists(model_path):
+        print_info(f"Model not found locally. Downloading...")
+    
+    start_time = time.time()
+    try:
+        model = YOLO(model_path)
+        load_time = time.time() - start_time
+        print_success(f"Model loaded successfully in {load_time:.2f}s")
+        
+        task = getattr(model, 'task', 'detection')
+        names = getattr(model, 'names', {})
+        
+        print(f"  Task: {task.upper()}")
+        print(f"  Classes: {len(names)}")
+        
+        try:
+            params = sum(p.numel() for p in model.model.parameters())
+            print(f"  Parameters: {params / 1e6:.2f}M")
+        except:
+            pass
+        
         return model
+        
     except Exception as e:
-        print_error(f"Failed to download model: {e}")
-        if "No such file or directory" in str(e):
-            print_info("Hint: Check if the model name is correct:")
-            print("  - Detection models: yolov8n.pt, yolov8s.pt, etc.")
-            print("  - Segmentation models: yolov8n-seg.pt, yolov8s-seg.pt, etc.")
-            print("  - Classification models: yolov8n-cls.pt, yolov8s-cls.pt, etc.")
+        print_error(f"Failed to load model: {e}")
         return None
 
-def list_dependencies(model_name, download_dir=None):
-    print_subheader(f"Dependencies for {model_name}")
-    dependencies = {
-        "ultralytics": {"required": True, "for": "Base package for YOLOv8"},
-        "torch": {"required": True, "for": "Model inference"},
-        "torchvision": {"required": True, "for": "Image processing"},
-        "numpy": {"required": True, "for": "Numerical operations"},
-        "opencv-python": {"required": True, "for": "Image processing"},
-        "onnx": {"required": False, "for": "ONNX export/import"},
-        "onnxruntime": {"required": False, "for": "ONNX inference"},
-        "tensorrt": {"required": False, "for": "TensorRT inference"},
-    }
-    if "seg" in model_name:
-        dependencies["matplotlib"] = {"required": True, "for": "Segmentation visualization"}
-    headers = ["Package", "Status", "Required For"]
-    rows = []
-    for pkg, info in dependencies.items():
-        try:
-            pkg_installed = pkg in sys.modules or pkg.replace("-", "_") in sys.modules
-            if not pkg_installed:
-                import importlib
-                importlib.import_module(pkg.replace("-", "_"))
-                pkg_installed = True
-        except:
-            pkg_installed = False
-        status = f"{Colors.GREEN}Installed{Colors.ENDC}" if pkg_installed else f"{Colors.RED}Not Installed{Colors.ENDC}"
-        required = "Required" if info["required"] else "Optional"
-        rows.append([pkg, status, f"{required} - {info['for']}"])
-    print(format_table(headers, rows))
-    missing_required = [pkg for pkg, row in zip(dependencies.keys(), rows) if "Not Installed" in row[1] and dependencies[pkg]["required"]]
-    if missing_required:
-        print_warning("Missing required dependencies. Install with:")
-        print(f"pip install {' '.join(missing_required)}")
-    print_subheader("Next Steps")
-    if "onnx" in model_name:
-        print_info("To use this ONNX model:")
-        print("1. Install required dependencies")
-        print("2. Load with: `onnx_model = onnx.load('model.onnx')`")
-        print("3. Inference with ONNXRuntime")
-    elif "engine" in model_name:
-        print_info("To use this TensorRT engine:")
-        print("1. Ensure TensorRT is properly installed")
-        print("2. Load the engine with TensorRT runtime")
-    else:
-        print_info("To use this PyTorch model:")
-        print("1. Import the YOLO class: `from ultralytics import YOLO`")
-        print(f"2. Load the model: `model = YOLO('{model_name}')`")
-        print("3. Run inference: `results = model('image.jpg')`")
-        print("")
-        print_info("To convert to optimized formats:")
-        print("1. Export to ONNX: `model.export(format='onnx')`")
-        print("2. Export to TensorRT: `model.export(format='engine')`")
+
+def interactive_mode(device_info, libraries):
+    """Run interactive model selection."""
+    options = get_model_options(device_info)
+    display_model_options(options)
+    
+    max_id = len(options)
+    
+    try:
+        print(f"\nEnter option number (1-{max_id}): ", end="")
+        choice = input().strip()
+        
+        if not choice.isdigit():
+            print_error("Invalid input. Please enter a number.")
+            return None
+        
+        choice = int(choice)
+        if choice < 1 or choice > max_id:
+            print_error(f"Invalid option. Please enter a number between 1 and {max_id}.")
+            return None
+        
+        selected = options[choice - 1]
+        return load_model(selected["model"])
+        
+    except KeyboardInterrupt:
+        print("\n\nOperation cancelled.")
+        return None
+    except EOFError:
+        return None
+
 
 def main():
-    parser = argparse.ArgumentParser(description='YOLOv8 Model Downloader for Advantech Devices')
-    parser.add_argument('--list', action='store_true', help='List recommended models and exit')
-    parser.add_argument('--model', type=str, help='Specify model to download (e.g., yolov8n.pt)')
-    parser.add_argument('--task', type=str, choices=['detection', 'segmentation', 'classification'], 
-                      help='Task type to download model for')
-    parser.add_argument('--size', type=str, choices=['n', 's', 'm', 'l', 'x'], 
-                      help='Model size to download')
-    parser.add_argument('--dir', type=str, default='.', help='Directory to save the model')
+    parser = argparse.ArgumentParser(
+        description='Advantech YOLOv8 Model Loader',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                                 # Interactive mode
+  %(prog)s --model yolov8n.pt              # Load specific model
+  %(prog)s --task detection --size s       # Load detection model size s
+  %(prog)s --info-only                     # Show device info only
+        """
+    )
+    
+    parser.add_argument('--model', '-m', type=str, help='Model path to load')
+    parser.add_argument('--task', '-t', type=str, 
+                       choices=['detection', 'segmentation', 'classification'],
+                       help='Task type')
+    parser.add_argument('--size', '-s', type=str, 
+                       choices=['n', 's', 'm', 'l', 'x'],
+                       help='Model size')
+    parser.add_argument('--dir', '-d', type=str, default='.', help='Model directory')
+    parser.add_argument('--info-only', action='store_true', help='Show device info only')
+    parser.add_argument('--no-interactive', action='store_true', help='Disable interactive mode')
+    
     args = parser.parse_args()
-    os.system('clear')
-    print_header("YOLOv8 Model Downloader for Advantech Devices", shutil.get_terminal_size().columns)
-    print_progress("Detecting Advantech device...")
-    device_info = detect_advantech_device()
-    print_progress("Checking installed libraries...")
-    libraries = detect_available_libraries()
-    model_options = get_recommended_models(device_info)
+    
+    os.system('clear' if os.name != 'nt' else 'cls')
+    print_banner()
+    
+    device_info = detect_device()
+    libraries = detect_libraries()
+    
     display_device_info(device_info)
-    display_library_info(libraries)
-    if args.dir and args.dir != '.':
-        if not os.path.exists(args.dir):
-            os.makedirs(args.dir)
-        os.chdir(args.dir)
-        print_info(f"Changed working directory to {args.dir}")
+    display_libraries(libraries)
+    
+    if args.info_only:
+        return 0
+    
+    if not libraries.get("ultralytics", {}).get("installed", False):
+        print_error("ultralytics is required. Install with: pip install ultralytics")
+        return 1
+    
     if args.model:
-        model = download_model(args.model)
-        if model:
-            list_dependencies(args.model)
-        return
-    if args.task and args.size:
+        model_path = args.model
+        if args.dir != '.':
+            model_path = os.path.join(args.dir, model_path)
+        load_model(model_path)
+    elif args.task and args.size:
         if args.task == 'detection':
-            model_name = f"yolov8{args.size}.pt"
+            model_path = f"yolov8{args.size}.pt"
         elif args.task == 'segmentation':
-            model_name = f"yolov8{args.size}-seg.pt"
-        elif args.task == 'classification':
-            model_name = f"yolov8{args.size}-cls.pt"
-        model = download_model(model_name)
-        if model:
-            list_dependencies(model_name)
-        return
-    display_model_options(model_options)
-    if args.list:
-        return
-    try:
-        choice = input(f"\n{Colors.BOLD}Enter option number (1-{len(model_options)}): {Colors.ENDC}")
-        choice = int(choice)
-        selected_option = None
-        for option in model_options:
-            if option["id"] == choice:
-                selected_option = option
-                break
-        if selected_option:
-            model = download_model(selected_option["model_name"])
-            if model:
-                list_dependencies(selected_option["model_name"])
+            model_path = f"yolov8{args.size}-seg.pt"
         else:
-            print_error(f"Invalid option: {choice}")
-    except KeyboardInterrupt:
-        print("\nExiting...")
-    except ValueError:
-        print_error("Please enter a valid number")
-    print_header("Download Complete", shutil.get_terminal_size().columns)
+            model_path = f"yolov8{args.size}-cls.pt"
+        
+        if args.dir != '.':
+            model_path = os.path.join(args.dir, model_path)
+        load_model(model_path)
+    elif not args.no_interactive:
+        interactive_mode(device_info, libraries)
+    
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
