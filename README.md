@@ -1,12 +1,53 @@
 # Advantech-YOLO-Vision-Applications Container
-
-A professional toolkit for deploying optimized YOLOv8 vision applications container on Advantech edge AI devices with hardware acceleration.
+**Version:** 2.0
+**Release Date:** November 2025
+**Copyright:** © 2025 Advantech Corporation. All rights reserved.
+>  Check our [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide) for common issues and solutions.
 
 ## Overview
 
 This repository provides a streamlined solution for running YOLOv8 computer vision applications  container on Advantech edge AI hardware. The Container includes toolkit  which automatically detects your device capabilities and sets up an optimized environment for computer vision tasks with full hardware acceleration support.
 
 Designed specifically for Advantech edge AI devices based on NVIDIA Jetson platforms, this toolkit enables rapid deployment of object detection, instance segmentation, and classification applications with minimal configuration required.
+
+## Host System Requirements
+
+| Component | Version/Requirement |
+|-----------|---------|
+| **JetPack** | 5.x |
+| **CUDA** | 11.4.315 |
+| **cuDNN** | 8.6.0.166 |
+| **TensorRT** | 8.5.2.2 |
+| **OpenCV** | 4.5.4 |
+
+* CUDA , CuDNN , TensorRT , OpenCV versions Depends on JetPack version 5.x
+* Please refer to the [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for more details on compatible versions.
+
+## Container Description
+## Hardware Specifications
+
+| Component | Specification |
+|-----------|---------------|
+| Target Hardware | NVIDIA Jetson™ |
+| GPU | NVIDIA® Ampere architecture with 1024 CUDA® cores |
+| DLA Cores | 1 (Deep Learning Accelerator) |
+| Memory | 4/8/16 GB shared GPU/CPU memory |
+| JetPack Version | 5.x |
+
+## Software Components
+
+The following software components are available in the base image:
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| CUDA® | 11.4.315 | GPU computing platform |
+| cuDNN | 8.6.0 | Deep Neural Network library |
+| TensorRT™ | 8.5.2.2 | Inference optimizer and runtime |
+| PyTorch | 2.0.0+nv23.02 | Deep learning framework |
+| TensorFlow | 2.12.0 | Machine learning framework |
+| ONNX Runtime | 1.16.0 | Cross-platform inference engine |
+| OpenCV | 4.5.0 | Computer vision library with CUDA® |
+| GStreamer | 1.16.2 | Multimedia framework |
 
 ## Features
 
@@ -34,12 +75,24 @@ Designed specifically for Advantech edge AI devices based on NVIDIA Jetson platf
 - Support for custom classification tasks
 - Class confidence visualization
 
+## Before You Start
+Please take a note of the following points:
+
+- Ensure the following components are installed on your host system:
+  - **Docker** (v28.1.1 or compatible)
+  - **Docker Compose** (v2.39.1 or compatible)
+  - **NVIDIA Container Toolkit** (v1.11.0 or compatible)
+  - **NVIDIA Runtime** configured in Docker
+
+
 ## Quick Start
 
 1. Clone this repository:
 ```bash
 git clone https://github.com/Advantech-EdgeSync-Containers/Advantech-YOLO-Vision-Applications.git
 cd Advantech-YOLO-Vision-Applications
+# Provide executable rights
+chmod +x *.sh
 ```
 
 2. Start the container environment:
@@ -48,12 +101,30 @@ chmod +x build.sh
 ./build.sh
 ```
 
+3. Install required dependencies:
+```bash
+# Install Ultralytics YOLOv8 framework with specific versions
+pip install ultralytics==8.0.43 --no-deps
+pip install ultralytics-thop==2.0.14 --no-deps
+```
+
+4.   AI Accelerator and Software Stack Verification (Optional)
+```
+# Verify AI Accelerator and Software Stack Inside Docker Container
+# Under /workspace, run this command
+# Provide executable rights
+chmod +x wise-bench.sh
+
+# To run Wise-bench
+./wise-bench.sh
+```
+
 3. The Docker container will launch with all necessary hardware acceleration. You can access the applications as described in the Usage sections below.
 
 
 4. Please refer to the [Acknowledgments](#acknowledgments) section for required package versions and installation commands before proceeding.
 
-5. If you encounterny issues during setup or execution (such as Gstreamer warnings, X11 display problems, Docker Compose errors, or permission issues), please refer to our [Troubleshooting Guide](troubleshooting.md) for detailed solutions.
+5. If you encounter any issues during setup or execution (such as Gstreamer warnings, X11 display problems, Docker Compose errors, or permission issues), please refer to our [Troubleshooting Guide](troubleshooting.md) for detailed solutions.
 
 ### Model Loading Utility
 
@@ -93,16 +164,48 @@ Parameters:
 - `half`: Enable half precision (FP16) for faster inference
 
 
-
 ## Application Usage
 
 ### YOLOv8 Vision Application
 
-The main `advantech-yolo.py` application offers a complete solution for running YOLOv8 models:
-
+The main `advantech-yolo.py` application offers an interactive pipeline for running YOLOv8 models with an easy-to-use menu system:
 ```bash
-python3 src/advantech-yolo.py 
+python3 src/advantech-yolo.py
 ```
+
+#### Interactive Menu Options:
+
+1. **Task Selection**:
+   - [1] Detection
+   - [2] Classification
+   - [3] Segmentation
+
+2. **Format Selection**:
+   - [1] PyTorch
+   - [2] ONNX
+   - [3] TensorRT
+
+3. **Source Selection**:
+   - [1] Webcam
+   - [2] RTSP
+   - [3] File
+
+4. **Camera/Resolution Configuration**:
+   - Automatic camera discovery with device listing
+   - Resolution selection (e.g., 1920x1080)
+
+5. **Output Options**:
+   - Save output: (y/n)
+   - Show display: (y/n)
+
+The pipeline will then start processing with real-time feedback including:
+- Model loading status
+- Warm-up progress
+- FPS counter
+- Flask app serving for web access
+
+Press 'q' in the display window or Ctrl+C to stop the pipeline.
+
 ### Results:
  
  #### Object Detection
@@ -111,26 +214,8 @@ python3 src/advantech-yolo.py
 ![Advantech Logo](data/segmentation.gif)
  #### Classification
  ![Advantech Logo](data/classification.gif)
-Parameters:
-- `--input`: Path to video file, image, or camera device ID (0 for primary camera)
-- `--model`: Path to YOLOv8 model file or model name (e.g., 'yolov8n.pt')
-- `--task`: Task type ('detect', 'segment', 'classify')
-- `--conf`: Confidence threshold (default: 0.25)
-- `--show`: Display results in real-time window
-- `--save`: Save results to output directory
-- `--device`: Device to run inference (cpu or 0 for GPU)
 
-Examples:
-```bash
-# Run object detection on a test video
-python3 src/advantech-yolo.py --input data/test.mp4 --task detect --model yolov8n.pt --show
 
-# Run instance segmentation on camera feed
-python3 src/advantech-yolo.py --input 0 --task segment --model yolov8n-seg.pt --conf 0.3 --show
-
-# Run classification on an image
-python3 src/advantech-yolo.py --input data/image.jpg --task classify --model yolov8n-cls.pt --save
-```
 
 ### Step-by-Step Usage Guide
 
@@ -200,19 +285,7 @@ The current version of the toolkit has the following limitations:
 
 7. **Single Stream Processing**: Currently supports processing one input stream at a time.
 
-## Future Work
 
-The following enhancements are planned for future releases:
-
-- **Vision Language Models (VLM)**: Integration with multimodal models for combining visual and text understanding
-- **Video Analytics**: Adding object counting, dwell time analysis, trajectory tracking, and heat maps
-- **Multi-stream Processing**: Support for processing multiple camera streams simultaneously
-- **REST API Interface**: HTTP API for remote inference triggering and results retrieval
-- **Anomaly Detection**: Algorithms for identifying unusual patterns and behaviors
-- **Automated Model Optimization**: Dynamic model adaptation based on deployment conditions
-- **Scene Understanding**: Moving from object detection to comprehensive scene interpretation
-- **Multi-sensor Fusion**: Integration with non-visual sensors for enhanced perception
-- **Autonomous Decision Making**: Enabling edge devices to make inferences that trigger actions
 
 ## Use Cases
 
@@ -245,3 +318,4 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
