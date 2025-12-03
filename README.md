@@ -243,16 +243,20 @@ Press 'q' in the display window or Ctrl+C to stop the pipeline.
 ## Directory Structure
 
 ```
-.
-├── data/               # Sample test data (includes test.mp4)
-├── src/                # Source code for applications
+Advantech-YOLO-Vision-Applications/
+├── data/                           # Sample test data
+├── src/                            # Source code for applications
 │   ├── advantech-coe-model-export.py  # Model export utility
 │   ├── advantech-coe-model-load.py    # Model download utility
-│   └── advantech-yolo.py              # Main YOLO application
-├── docker-compose.yml  # Docker Compose configuration
-├── build.sh            # Build script
-├── LICENSE             # License information
-└── README.md           # This file
+│   ├── advantech-yolo.py              # Main interactive YOLO application
+│   ├── advantech-core.py              # Core functionality and utilities
+│   └── advantech-classes.py           # Class definitions and configurations
+├── docker-compose.yml              # Docker Compose configuration
+├── build.sh                        # Container build and launch script
+├── init.sh                         # Initialization script
+├── wise-bench.sh                   # AI accelerator verification script
+├── LICENSE                         # License information
+└── README.md                       # This file
 ```
 
 ## Performance Recommendations
@@ -318,4 +322,5 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
 
