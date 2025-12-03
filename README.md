@@ -151,18 +151,107 @@ python3 src/advantech-coe-model-load.py --task segmentation --size n
 
 ### Model Export Utility
 
-The `advantech-coe-model-export.py` utility converts YOLOv8 models to optimized formats for edge deployment:
-
+The `advantech-coe-model-export.py` utility provides an interactive interface to convert YOLOv8 models to optimized formats for edge deployment on Advantech devices:
+#### Running the Export Utility
 ```bash
 python3 src/advantech-coe-model-export.py
 ```
 
-Parameters:
-- `task`: Choose from 'detection', 'segmentation', or 'classification'
-- `size`: Model size ('n' or 's' recommended)
-- `format`: Export format (onnx, engine, torchscript)
-- `device`: Device for optimization (cpu or 0 for GPU)
-- `half`: Enable half precision (FP16) for faster inference
+#### System Verification
+
+The utility automatically detects and verifies your hardware and software environment:
+
+**Detected Device Information:**
+- Device Model (e.g., NVIDIA Jetson Orin NX)
+- GPU Architecture (e.g., Ampere)
+- Compute Capability
+- GPU Memory
+- JetPack Version
+
+**Software Dependencies Status:**
+- ultralytics
+- torch (with CUDA support)
+- onnx
+- onnxruntime
+- tensorrt
+
+**System Libraries with Path:**
+- cuda
+- cudnn
+- tensorrt_libs
+- onnx_runtime_libs
+
+#### Interactive Export Workflow
+
+**Step 1: Select YOLOv8 Task**
+
+Available tasks with input sizes:
+- **[1] Object Detection**
+- **[2] Instance Segmentation** - Input: 640x640
+- **[3] Classification** - Input: 224x224
+
+**Step 2: Select Model Size**
+
+Available model sizes for your selected task:
+- **[1] Nano (YOLOv8n)** - Fastest inference, best for real-time on Jetson
+- **[2] Small (YOLOv8s)** - Good balance for edge devices
+- **[3] Medium (YOLOv8m)** - Higher accuracy, moderate speed
+- **[4] Large (YOLOv8l)** - High accuracy, slower inference
+- **[5] XLarge (YOLOv8x)** - Maximum accuracy, slowest inference
+
+**Step 3: Select Export Format**
+
+Export format options with device-specific optimization:
+- **[1] ONNX format (CPU mode)**
+  - Format: ONNX, Device: CPU
+  - Half precision (FP16): No, Optimize: Yes
+  - Exports to ONNX format using CPU (compatible with all systems)
+  - Requires: onnx
+
+- **[2] ONNX format (GPU mode, FP16)**
+  - Format: ONNX, Device: GPU
+  - Half precision (FP16): Yes, Optimize: No
+  - Exports to ONNX format using GPU acceleration with FP16 for Jetson
+  - Requires: onnx
+
+- **[3] TensorRT Engine (FP16) (RECOMMENDED)**
+  - Format: ENGINE, Device: GPU
+  - Half precision (FP16): Yes, Optimize: No
+  - Exports to TensorRT engine for maximum inference speed on Jetson
+  - Requires: tensorrt
+
+- **[4] TorchScript**
+  - Format: TORCHSCRIPT, Device: GPU
+  - Half precision (FP16): No, Optimize: No
+  - Exports to TorchScript format for PyTorch deployment
+  - Requires: torch
+
+**Step 4: Select Batch Export Configuration**
+
+The utility supports batch export of multiple models:
+- Proceed with batch export of 1 model? (y/n)
+- Option to add more tasks and repeat the process
+
+
+#### Examples
+
+**Export Detection Model to TensorRT (Recommended for Jetson):**
+```bash
+python3 src/advantech-coe-model-export.py
+# Select: [1] Object Detection → [1] Nano → [3] TensorRT Engine (FP16)
+```
+
+**Export Segmentation Model to ONNX:**
+```bash
+python3 src/advantech-coe-model-export.py
+# Select: [2] Instance Segmentation → [1] Nano → [2] ONNX format (GPU mode, FP16)
+```
+
+**Export Classification Model to TorchScript:**
+```bash
+python3 src/advantech-coe-model-export.py
+# Select: [3] Classification → [2] Small → [4] TorchScript
+```
 
 
 ## Application Usage
@@ -323,6 +412,7 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
 
 
 
