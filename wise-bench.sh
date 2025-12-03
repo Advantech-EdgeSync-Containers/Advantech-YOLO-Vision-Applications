@@ -53,7 +53,6 @@ print_table_header() {
 }
 print_table_row() { printf "| %-25s | %-20s |\n" "$1" "$2"; }
 print_table_footer() { echo "+--------------------------------------------------+"; }
-
 print_header "SYSTEM INFORMATION"
 print_table_header "SYSTEM DETAILS"
 KERNEL=$(uname -r)
@@ -73,7 +72,6 @@ print_table_row "CPU Cores" "$CPU_CORES"
 print_table_row "Memory" "$MEMORY_USED / $MEMORY_TOTAL"
 print_table_row "Date" "$(date '+%Y-%m-%d %H:%M:%S')"
 print_table_footer
-
 print_header "NVIDIA DEVICES"
 echo "+------------------------------------------------------------------+"
 printf "| %-30s| %-15s| %-12s|\n" "Device" "Type" "Status"
@@ -92,7 +90,6 @@ if [[ "$DEVICE_COUNT" -eq 0 ]]; then
 fi
 echo "+------------------------------------------------------------------+"
 print_success "Found $DEVICE_COUNT NVIDIA devices"
-
 print_header "CUDA INFORMATION"
 echo -e "${YELLOW}"
 echo "       ██████╗██╗   ██╗██████╗  █████╗ "
@@ -125,7 +122,6 @@ else
     fi
 fi
 print_table_footer
-
 print_header "OPENCV CUDA TEST"
 echo -ne "▶ Testing OpenCV CUDA support... "
 sleep 1
@@ -152,7 +148,6 @@ else
     print_table_row "Status" "⚠ CPU Mode Only"
 fi
 print_table_footer
-
 print_header "PYTORCH CUDA TEST"
 echo -ne "▶ Running PyTorch CUDA test... "
 sleep 1
@@ -182,7 +177,6 @@ else
     print_table_row "Status" "⚠ CPU Only"
 fi
 print_table_footer
-
 print_header "ONNX RUNTIME TEST"
 echo -ne "▶ Checking ONNX providers... "
 sleep 1
@@ -209,7 +203,6 @@ else
     print_table_row "Status" "⚠ CPU Only"
 fi
 print_table_footer
-
 print_header "TENSORRT TEST"
 echo -ne "▶ Testing TensorRT capabilities... "
 sleep 1
@@ -252,7 +245,6 @@ else
     print_table_row "Status" "⚠ Not available"
 fi
 print_table_footer
-
 print_header "YOLO MODEL TEST"
 echo -ne "▶ Testing YOLO inference... "
 print_table_header "YOLO INFERENCE DETAILS"
@@ -346,7 +338,6 @@ else
     print_table_row "Status" "No objects detected or video not found"
 fi
 print_table_footer
-
 print_header "GSTREAMER NVIDIA PLUGINS"
 echo -ne "▶ Collecting NVIDIA GStreamer plugins... "
 sleep 1
@@ -418,7 +409,6 @@ else
     print_table_row "Hardware Encoder" "⚠ Not detected"
 fi
 print_table_footer
-
 print_header "VIDEO DECODING TEST"
 print_table_header "VIDEO DECODING DETAILS"
 VDEC_OK=0
@@ -451,7 +441,6 @@ else
     print_table_row "Camera Device" "⚠ Not detected"
 fi
 print_table_footer
-
 print_header "DIAGNOSTICS SUMMARY"
 echo -e "${PURPLE}"
 echo "      ██╗   ██╗ ██████╗ ██╗      ██████╗ "
