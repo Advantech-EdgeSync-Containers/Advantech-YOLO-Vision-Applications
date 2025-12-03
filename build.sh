@@ -26,9 +26,7 @@
 #
 # Copyright (c) 2025 Advantech Corporation. All rights reserved.
 # ==========================================================================
-
 set -euo pipefail
-
 readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CONTAINER_NAME="advantech-yolo-vision"
@@ -37,12 +35,10 @@ readonly XAUTH_FILE="${HOME}/.docker.xauth"
 readonly COMPOSE_TIMEOUT=60
 readonly RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m' CYAN='\033[0;36m' WHITE='\033[1;37m' NC='\033[0m'
-
 log() { echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
 log_error() { echo -e "${RED}[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*${NC}" >&2; }
 log_success() { echo -e "${GREEN}[SUCCESS] $(date '+%Y-%m-%d %H:%M:%S') $*${NC}" >&2; }
 log_warning() { echo -e "${YELLOW}[WARN] $(date '+%Y-%m-%d %H:%M:%S') $*${NC}" >&2; }
-
 error_handler() {
     local line_no=$1
     log_error "Build script failed at line ${line_no}"
@@ -66,9 +62,7 @@ EOF
     echo -e "${CYAN}Initializing AI Development Environment...${NC}\n"
     sleep 2
 }
-
 command_exists() { command -v "$1" &>/dev/null; }
-
 check_prerequisites() {
     log "Verifying prerequisites..."
     local missing_deps=()
@@ -89,7 +83,6 @@ check_prerequisites() {
     log_success "Prerequisites verified"
     return 0
 }
-
 init_project_structure() {
     log "Checking project directory structure..."
     for dir in "${PROJECT_DIRS[@]}"; do
@@ -101,7 +94,6 @@ init_project_structure() {
     done
     log_success "Project structure verified"
 }
-
 setup_x11_forwarding() {
     log "Configuring X11 forwarding..."
     if [[ -n "${SSH_CONNECTION:-}" ]]; then
@@ -136,7 +128,6 @@ setup_x11_forwarding() {
     else log_warning "X11 forwarding not configured - GUI applications may not work"; fi
     log_success "X11 configuration completed"
 }
-
 start_containers() {
     log "Starting Docker containers..."
     if [[ ! -f "${SCRIPT_DIR}/docker-compose.yml" ]]; then
@@ -187,7 +178,6 @@ run_post_start_scripts() {
         log_warning "To install later, run inside container: ./init.sh --force"
     fi
 }
-
 connect_to_container() {
     log "Connecting to container..."
     echo
@@ -205,7 +195,6 @@ connect_to_container() {
     echo
     exec docker exec -it "${CONTAINER_NAME}" bash
 }
-
 main() {
     display_banner
     cd "${SCRIPT_DIR}"
@@ -216,5 +205,4 @@ main() {
     run_post_start_scripts
     connect_to_container
 }
-
 main "$@"
