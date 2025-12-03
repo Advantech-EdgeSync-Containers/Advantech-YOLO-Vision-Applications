@@ -56,7 +56,6 @@ services:
       com.advantech.jetpack: "5.1.2"
       com.advantech.cuda: "11.4"
       com.advantech.tensorrt: "8.5"
-
     environment:
       # Display settings
       - DISPLAY=${DISPLAY:-:0}
@@ -149,7 +148,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-
 # ==========================================================================
 # Notes:
 # ==========================================================================
@@ -168,4 +166,5 @@ services:
 # 5. For CSI cameras, use nvarguscamerasrc:
 #    gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! nvvidconv ! xvimagesink
 # ==========================================================================
+
 
