@@ -2,7 +2,7 @@
 # ==========================================================================
 # Jetson GPU Passthrough Docker Compose Build Script
 # ==========================================================================
-# Version:      2.1.0
+# Version:      2.0.0
 # Author:       Samir Singh <samir.singh@nvantech.com> and Apoorv Saxena<apoorv.saxena@advantech.com>
 # Created:      January 10, 2025
 # Last Updated: Dec 03, 2025
