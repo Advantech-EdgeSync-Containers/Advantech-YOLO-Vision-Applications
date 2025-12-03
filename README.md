@@ -32,10 +32,11 @@ Designed specifically for Advantech edge AI devices based on NVIDIA Jetson platf
 |-----------|---------------|
 | Target Hardware | NVIDIA Jetson™ |
 | GPU | NVIDIA® Ampere architecture with 1024 CUDA® cores |
-| DLA Cores | 1 (Deep Learning Accelerator) |
+| DLA Cores* | 1 (Deep Learning Accelerator) |
 | Memory | 4/8/16 GB shared GPU/CPU memory |
 | JetPack Version | 5.x |
 
+*Depends on the Hardware Specification please check the host configuration for mroe details.
 ## Software Components
 
 The following software components are available in the base image:
@@ -322,6 +323,7 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
 
 
 
