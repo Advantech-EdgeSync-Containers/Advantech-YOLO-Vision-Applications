@@ -92,16 +92,16 @@ Please take a note of the following points:
 git clone https://github.com/Advantech-EdgeSync-Containers/Advantech-YOLO-Vision-Applications.git
 cd Advantech-YOLO-Vision-Applications
 # Provide executable rights
+# Make sure the directory has init.sh , build.sh and wise-bench.sh
 chmod +x *.sh
 ```
 
 2. Start the container environment:
 ```bash
-chmod +x build.sh
 ./build.sh
 ```
 
-3. Install required dependencies:
+3. Install required dependencies inside the Container:
 ```bash
 # Install Ultralytics YOLOv8 framework with specific versions
 pip install ultralytics==8.0.43 --no-deps
@@ -111,9 +111,7 @@ pip install ultralytics-thop==2.0.14 --no-deps
 4.   AI Accelerator and Software Stack Verification (Optional)
 ```
 # Verify AI Accelerator and Software Stack Inside Docker Container
-# Under /workspace, run this command
-# Provide executable rights
-chmod +x wise-bench.sh
+# Under /advantech, run this command
 
 # To run Wise-bench
 ./wise-bench.sh
@@ -202,7 +200,7 @@ The pipeline will then start processing with real-time feedback including:
 - Model loading status
 - Warm-up progress
 - FPS counter
-- Flask app serving for web access
+- Flask app serving for Health Check
 
 Press 'q' in the display window or Ctrl+C to stop the pipeline.
 
@@ -322,5 +320,6 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
 
 
