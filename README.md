@@ -187,8 +187,8 @@ The utility automatically detects and verifies your hardware and software enviro
 
 Available tasks with input sizes:
 - **[1] Object Detection**
-- **[2] Instance Segmentation** - Input: 640x640
-- **[3] Classification** - Input: 224x224
+- **[2] Instance Segmentation**
+- **[3] Classification** 
 
 **Step 2: Select Model Size**
 
@@ -229,13 +229,13 @@ Export format options with device-specific optimization:
 **Step 4: Select Batch Export Configuration**
 
 The utility supports batch export of multiple models:
-- Proceed with batch export of 1 model? (y/n)
+- Proceed with batch export of 1 model? (y/n)*
 - Option to add more tasks and repeat the process
-
+*Press y for batch export
 
 #### Examples
 
-**Export Detection Model to TensorRT (Recommended for Jetson):**
+**Export Detection Model to TensorRT :**
 ```bash
 python3 src/advantech-coe-model-export.py
 # Select: [1] Object Detection → [1] Nano → [3] TensorRT Engine (FP16)
@@ -412,6 +412,7 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
 
 
 
