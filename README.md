@@ -129,24 +129,101 @@ pip install ultralytics-thop==2.0.14 --no-deps
 
 ### Model Loading Utility
 
-The `advantech-coe-model-load.py` utility helps download optimized YOLOv8 models for your Advantech device:
+The `advantech-coe-model-load.py` utility helps download and manage optimized YOLOv8 models for your Advantech device with an interactive interface.
 
+#### Running the Model Loading Utility
 ```bash
-python3 src/advantech-coe-model-load.py 
+python3 src/advantech-coe-model-load.py
 ```
+#### System Detection
 
-Parameters:
-- `task`: Choose from 'detection', 'segmentation', or 'classification' (default: detection)
-- `size`: Model size, use 'n' for nano or 's' for small (default: based on device)
-- `dir`: Directory to save models (default: current directory)
+The utility automatically detects your hardware configuration and recommends optimal models based on your device capabilities:
 
-Examples:
+##### Detected Device Information
+
+The utility displays:
+- Device model and product name
+- GPU architecture and compute capability
+- CUDA cores and memory capacity
+- Operating system version
+- NVIDIA system information (for Jetson devices)
+
+##### Detected Libraries
+
+The utility verifies all required dependencies:
+
+| Library | Purpose |
+|---------|---------|
+| **ultralytics** | YOLOv8 framework |
+| **numpy** | Numerical computing |
+| **torch** | PyTorch with CUDA support |
+| **torchvision** | Computer vision utilities |
+| **onnx** | Model format support |
+| **onnxruntime** | ONNX inference engine |
+| **tensorrt** | NVIDIA TensorRT acceleration |
+| **cv2** | OpenCV for image processing |
+| **PIL** | Python Imaging Library |
+
+---
+
+#### Available YOLOv8 Models
+
+The utility presents device-optimized model recommendations based on your hardware:
+
+##### Recommended Models (Nano - Size: n)
+
+| Option | Model | Task | Description |
+|--------|-------|------|-------------|
+| **[1]** | YOLOv8n Detection  | detection | Recommended detection model for your device |
+| **[2]** | YOLOv8n Segmentation  | segmentation | Recommended segmentation model for your device |
+| **[3]** | YOLOv8n Classification  | classification | Recommended classification model for your device |
+
+##### Alternative Models (Small - Size: s)
+
+| Option | Model | Task | Description |
+|--------|-------|------|-------------|
+| **[4]** | YOLOv8s Detection | detection | Alternative detection model with higher accuracy |
+| **[5]** | YOLOv8s Segmentation | segmentation | Alternative segmentation model with higher accuracy |
+| **[6]** | YOLOv8s Classification | classification | Alternative classification model with higher accuracy |
+
+
+---
+
+#### Interactive Model Selection
+
+##### Step 1: Select Model
+
+Choose from the available models by entering the option number.
+
+##### Step 2: Automatic Download & Verification
+
+The utility automatically:
+1.  Downloads the selected YOLOv8 model from Ultralytics
+2.  Verifies successful download
+3.  Displays model information:
+   - Model file name
+   - Task type (DETECT/SEGMENT/CLASSIFY)
+   - Number of classes (for detection/segmentation)
+   - Total parameters
+   - Load time
+
+---
+
+#### Usage Examples
+
+##### Load Detection Model
 ```bash
-# Download a YOLOv8n detection model
-python3 src/advantech-coe-model-load.py --task detection --size n
+python3 src/advantech-coe-model-load.py
 
-# Download a YOLOv8s segmentation model
-python3 src/advantech-coe-model-load.py --task segmentation --size n
+# Interactive selection:
+# Enter option number (1-6): 1
+
+# Output:
+# Loading model: yolov8n.pt...
+# ✓ Model loaded successfully in 0.07s
+#   Task: DETECT
+#   Classes: 80
+#   Parameters: 3.16M
 ```
 
 ### Model Export Utility
@@ -412,6 +489,7 @@ For complete license details, see the [LICENSE](https://github.com/Advantech-Edg
 
 
 - **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+
 
 
 
