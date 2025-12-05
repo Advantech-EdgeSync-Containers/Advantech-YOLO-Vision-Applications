@@ -64,7 +64,7 @@ Install these components on your Advantech device before using this toolkit.
 | Docker Compose | 2.39.1 or later |
 | NVIDIA Container Toolkit | 1.11.0 or later |
 
-Component versions depend on your **JetPack Version**. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for installation see  **SDK Managaer** see [SDK Manager](https://developer.nvidia.com/sdk-manager) for details. 
+Component versions depend on your **JetPack Version**. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for installation check [SDK Manager](https://developer.nvidia.com/sdk-manager) for details. 
 
 ### Container Environment
 
@@ -413,6 +413,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
