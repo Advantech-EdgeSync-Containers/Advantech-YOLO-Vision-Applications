@@ -115,7 +115,7 @@ Launch the Docker environment. This script creates project directories, configur
 
 ### Step 4: Install Dependencies
 
-Inside the container, install the YOLOv8 framework. These specific versions are validated against the container's software stack.
+Inside the container, install the YOLOv8 framework. These specific versions are validated against the container's software stack and are use for yolo inference testing in the wise-bench so make sure you install these first before running the wise-bench.
 
 ```bash
 pip install ultralytics==8.0.43 --no-deps
@@ -404,6 +404,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
