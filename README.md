@@ -24,9 +24,9 @@ The toolkit automatically detects device capabilities and configures optimal set
 
 | Specification | Details |
 |:--------------|:--------|
-| Platform | NVIDIA Jetson (Orin, Xavier, TX2) |
+| Platform | NVIDIA Jetson (Orin-nano, Orin-nx, Xavier AGX) |
 | GPU Architecture | Ampere, Volta, Pascal |
-| Memory | 4GB, 8GB, or 16GB shared |
+| Memory | 4GB, 8GB, 16GB or 32GB shared |
 | JetPack | 5.x |
 
 For troubleshooting, see the [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide).
@@ -413,6 +413,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
