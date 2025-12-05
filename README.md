@@ -205,7 +205,7 @@ The export utility guides you through three selections (Task, Size, Format).
 
 ## Running Inference
 
-### Interactive Mode
+### Interactive Mode (User Mode)
 
 Launch the main application with menu-driven configuration.
 
@@ -218,7 +218,7 @@ The application prompts for task type, model format, model path, input source, a
 ---
 
 
-## Interactive Workflow Results
+## Interactive Workflow Results 
 
 ### Object Detection
 
@@ -234,7 +234,14 @@ The application prompts for task type, model format, model path, input source, a
 
 ---
 
-### Command Line Mode
+### Command Line Mode (Developer Mode)
+For more details related to CLI parameters
+```bash
+python3 src/advantech-yolo.py -h
+```
+![yolohelp](data/yolo_help.png)
+
+
 
 For scripted or automated use, specify options directly.
 
@@ -397,6 +404,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
