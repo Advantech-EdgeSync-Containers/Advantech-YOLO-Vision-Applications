@@ -46,7 +46,7 @@ Install these components on your Advantech device before using this toolkit.
 
 | Component | Version |
 |:----------|:--------|
-| JetPack | 5.x |
+| JetPack | 5.1.2 |
 | CUDA | 11.4.315 |
 | cuDNN | 8.6.0.166 |
 | TensorRT | 8.5.2.2 |
@@ -55,7 +55,7 @@ Install these components on your Advantech device before using this toolkit.
 | Docker Compose | 2.39.1 or later |
 | NVIDIA Container Toolkit | 1.11.0 or later |
 
-Component versions depend on your JetPack installation. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for details.
+Component versions depend on your **JetPack Version**. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for details.
 
 ### Container Environment
 
@@ -396,3 +396,4 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
