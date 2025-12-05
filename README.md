@@ -1,500 +1,398 @@
-# Advantech-YOLO-Vision-Applications Container
-**Version:** 2.0
-**Release Date:** November 2025
-**Copyright:** © 2025 Advantech Corporation. All rights reserved.
-A professional toolkit for deploying optimized YOLOv8 vision applications container on Advantech edge AI devices with hardware acceleration.
+# Advantech YOLO Vision Applications
 
->  Check our [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide) for common issues and solutions.
+**Version 2.0.0 | November 2025 | Advantech Corporation**
+
+A containerized toolkit for deploying YOLOv8 computer vision applications on Advantech edge AI devices with hardware acceleration.
+
+---
 
 ## Overview
 
-This repository provides a streamlined solution for running YOLOv8 computer vision applications  container on Advantech edge AI hardware. The Container includes toolkit  which automatically detects your device capabilities and sets up an optimized environment for computer vision tasks with full hardware acceleration support.
+This repository provides a production-ready Docker environment for running YOLOv8 inference on NVIDIA Jetson-based Advantech hardware. The container includes pre-configured software for object detection, instance segmentation, and image classification with full GPU acceleration.
 
-Designed specifically for Advantech edge AI devices based on NVIDIA Jetson platforms, this toolkit enables rapid deployment of object detection, instance segmentation, and classification applications with minimal configuration required.
+The toolkit automatically detects device capabilities and configures optimal settings for real-time performance.
 
-## Host System Requirements
+**Supported Applications:**
 
-| Component | Version/Requirement |
-|-----------|---------|
-| **JetPack** | 5.x |
-| **CUDA** | 11.4.315 |
-| **cuDNN** | 8.6.0.166 |
-| **TensorRT** | 8.5.2.2 |
-| **OpenCV** | 4.5.4 |
+| Application | Description |
+|:------------|:------------|
+| Object Detection | Real-time detection with bounding boxes for 80 COCO classes |
+| Instance Segmentation | Pixel-level masks for precise object boundaries |
+| Image Classification | Categorization across 1,000 ImageNet classes |
 
-* CUDA , CuDNN , TensorRT , OpenCV versions Depends on JetPack version 5.x
-* Please refer to the [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for more details on compatible versions.
+For troubleshooting, see the [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide).
 
-## Container Description
-## Hardware Specifications
+---
 
-| Component | Specification |
-|-----------|---------------|
-| Target Hardware | NVIDIA Jetson™ |
-| GPU | NVIDIA® Ampere architecture with 1024 CUDA® cores |
-| DLA Cores* | 1 (Deep Learning Accelerator) |
-| Memory | 4/8/16 GB shared GPU/CPU memory |
-| JetPack Version | 5.x |
+## Table of Contents
 
-*Depends on the Hardware Specification please check the host configuration for mroe details.
-## Software Components
+- [System Requirements](#system-requirements)
+- [Quick Start](#quick-start)
+- [Model Management](#model-management)
+- [Running Inference](#running-inference)
+- [Export Formats](#export-formats)
+- [Performance Guidelines](#performance-guidelines)
+- [Directory Structure](#directory-structure)
+- [Limitations](#limitations)
+- [License](#license)
 
-The following software components are available in the base image:
+---
+
+## System Requirements
+
+### Host System
+
+Install these components on your Advantech device before using this toolkit.
+
+| Component | Version |
+|:----------|:--------|
+| JetPack | 5.x |
+| CUDA | 11.4.315 |
+| cuDNN | 8.6.0.166 |
+| TensorRT | 8.5.2.2 |
+| OpenCV | 4.5.4 |
+| Docker | 28.1.1 or later |
+| Docker Compose | 2.39.1 or later |
+| NVIDIA Container Toolkit | 1.11.0 or later |
+
+Component versions depend on your JetPack installation. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for details.
+
+### Container Environment
+
+The Docker container includes the following pre-configured components.
 
 | Component | Version | Description |
-|-----------|---------|-------------|
-| CUDA® | 11.4.315 | GPU computing platform |
+|:----------|:--------|:------------|
+| CUDA | 11.4.315 | GPU computing platform |
 | cuDNN | 8.6.0 | Deep Neural Network library |
-| TensorRT™ | 8.5.2.2 | Inference optimizer and runtime |
+| TensorRT | 8.5.2.2 | Inference optimizer and runtime |
 | PyTorch | 2.0.0+nv23.02 | Deep learning framework |
 | TensorFlow | 2.12.0 | Machine learning framework |
 | ONNX Runtime | 1.16.0 | Cross-platform inference engine |
-| OpenCV | 4.5.0 | Computer vision library with CUDA® |
+| OpenCV | 4.5.0 | Computer vision library with CUDA |
 | GStreamer | 1.16.2 | Multimedia framework |
 
-## Features
+### Supported Hardware
 
-- **Complete Docker Environment**: Pre-configured container with all necessary hardware acceleration settings
-- **Optimized Model Management**: Tools for downloading and converting YOLOv8 models to accelerated formats
-- **Hardware Acceleration Support**: Full integration with NVIDIA CUDA, TensorRT, and GStreamer
-- **X11 Display Support**: Seamless visualization of model outputs directly from the container
-- **Multiple Vision Applications**: Ready-to-use applications for object detection, segmentation, and classification
+| Specification | Details |
+|:--------------|:--------|
+| Platform | NVIDIA Jetson (Orin, Xavier, TX2) |
+| GPU Architecture | Ampere, Volta, Pascal |
+| Memory | 4GB, 8GB, or 16GB shared |
+| JetPack | 5.x |
 
-## Applications Included
-
-### Object Detection
-- Real-time object detection using YOLOv8
-- Support for 80+ COCO dataset classes
-- Configurable confidence thresholds and post-processing
-
-
-### Instance Segmentation
-- Pixel-level object segmentation for precise boundary detection
-- Multi-class segmentation capabilities
-- Visualization tools for segmentation masks
-
-### Object Classification
-- High-accuracy image classification
-- Support for custom classification tasks
-- Class confidence visualization
 
 ## Before You Start
-Please take a note of the following points:
-
-- Ensure the following components are installed on your host system:
-  - **Docker** (v28.1.1 or compatible)
-  - **Docker Compose** (v2.39.1 or compatible)
-  - **NVIDIA Container Toolkit** (v1.11.0 or compatible)
-  - **NVIDIA Runtime** configured in Docker
-
+Before proceeding, ensure that your system meets the required [System Requirements](#system-requirements). If you encounter any issues or inconsistencies in your environment, please consult our [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide) for solutions and to verify that all prerequisites are properly satisfied
+---
 
 ## Quick Start
 
-1. Clone this repository:
+### Step 1: Clone the Repository
+
+Download the toolkit to your device.
+
 ```bash
 git clone https://github.com/Advantech-EdgeSync-Containers/Advantech-YOLO-Vision-Applications.git
 cd Advantech-YOLO-Vision-Applications
-# Provide executable rights
-# Make sure the directory has init.sh , build.sh and wise-bench.sh
+```
+
+### Step 2: Set Permissions
+
+Grant execute permissions to the setup scripts.
+
+```bash
 chmod +x *.sh
 ```
 
-2. Start the container environment:
+### Step 3: Start the Container
+
+Launch the Docker environment. This script creates project directories, configures GPU access, and opens an interactive terminal inside the container.
+
 ```bash
 ./build.sh
 ```
 
-3. Install required dependencies inside the Container:
+### Step 4: Install Dependencies
+
+Inside the container, install the YOLOv8 framework. These specific versions are validated against the container's software stack.
+
 ```bash
-# Install Ultralytics YOLOv8 framework with specific versions
 pip install ultralytics==8.0.43 --no-deps
 pip install ultralytics-thop==2.0.14 --no-deps
 ```
 
-4.   AI Accelerator and Software Stack Verification (Optional)
-```
-# Verify AI Accelerator and Software Stack Inside Docker Container
-# Under /advantech, run this command
+### Step 5: Verify Installation (Optional)
 
-# To run Wise-bench
+Run the diagnostic script to confirm hardware acceleration is working.
+
+```bash
 ./wise-bench.sh
 ```
+The wise-bench script will run as below as per the system specifications.
+![wise-bench](data/wisebench.gif)
 
-3. The Docker container will launch with all necessary hardware acceleration. You can access the applications as described in the Usage sections below.
+---
 
+## Model Management
 
-4. Please refer to the [Acknowledgments](#acknowledgments) section for required package versions and installation commands before proceeding.
+### Downloading Models
 
+The model loader detects your hardware and recommends appropriate models.
 
-
-### Model Loading Utility
-
-The `advantech-coe-model-load.py` utility helps download and manage optimized YOLOv8 models for your Advantech device with an interactive interface.
-
-#### Running the Model Loading Utility
 ```bash
 python3 src/advantech-coe-model-load.py
 ```
-#### System Detection
+![Model load Menu Demo](data/load.gif)
 
-The utility automatically detects your hardware configuration and recommends optimal models based on your device capabilities:
-
-##### Detected Device Information
-
-The utility displays:
-- Device model and product name
-- GPU architecture and compute capability
-- CUDA cores and memory capacity
-- Operating system version
-- NVIDIA system information (for Jetson devices)
-
-##### Detected Libraries
-
-The utility verifies all required dependencies:
-
-| Library | Purpose |
-|---------|---------|
-| **ultralytics** | YOLOv8 framework |
-| **numpy** | Numerical computing |
-| **torch** | PyTorch with CUDA support |
-| **torchvision** | Computer vision utilities |
-| **onnx** | Model format support |
-| **onnxruntime** | ONNX inference engine |
-| **tensorrt** | NVIDIA TensorRT acceleration |
-| **cv2** | OpenCV for image processing |
-| **PIL** | Python Imaging Library |
-
----
-
-#### Available YOLOv8 Models
-
-The utility presents device-optimized model recommendations based on your hardware:
-
-##### Recommended Models (Nano - Size: n)
+The utility presents an interactive menu. Select a model by entering its number.
 
 | Option | Model | Task | Description |
-|--------|-------|------|-------------|
-| **[1]** | YOLOv8n Detection  | detection | Recommended detection model for your device |
-| **[2]** | YOLOv8n Segmentation  | segmentation | Recommended segmentation model for your device |
-| **[3]** | YOLOv8n Classification  | classification | Recommended classification model for your device |
+|:-------|:------|:-----|:------------|
+| 1 | YOLOv8n | Detection | Recommended for real-time applications |
+| 2 | YOLOv8n-seg | Segmentation | Recommended for real-time applications |
+| 3 | YOLOv8n-cls | Classification | Recommended for real-time applications |
+| 4 | YOLOv8s | Detection | Higher accuracy, moderate speed |
+| 5 | YOLOv8s-seg | Segmentation | Higher accuracy, moderate speed |
+| 6 | YOLOv8s-cls | Classification | Higher accuracy, moderate speed |
 
-##### Alternative Models (Small - Size: s)
+Nano (n) models provide the fastest inference and are recommended for real-time applications. Small (s) models offer higher accuracy at reduced speed.
 
-| Option | Model | Task | Description |
-|--------|-------|------|-------------|
-| **[4]** | YOLOv8s Detection | detection | Alternative detection model with higher accuracy |
-| **[5]** | YOLOv8s Segmentation | segmentation | Alternative segmentation model with higher accuracy |
-| **[6]** | YOLOv8s Classification | classification | Alternative classification model with higher accuracy |
+
+
+### Exporting Models
+
+Convert models to optimized formats for deployment.
+
+```bash
+python3 src/advantech-coe-model-export.py
+```
+The export utility guides you through three selections (Task, Size, Format).
+
+![Model Export Menu Demo](data/export.gif)
+
+
+**Task Selection:**
+
+| Option | Task | Input Size |
+|:-------|:-----|:-----------|
+| 1 | Object Detection | 640×640 |
+| 2 | Instance Segmentation | 640×640 |
+| 3 | Classification | 224×224 |
+
+**Model Size Selection:**
+
+| Option | Size | Characteristics |
+|:-------|:-----|:----------------|
+| 1 | Nano | Fastest inference, best for real-time |
+| 2 | Small | Good balance of speed and accuracy |
+| 3 | Medium | Higher accuracy, moderate speed |
+| 4 | Large | High accuracy, slower inference |
+| 5 | XLarge | Maximum accuracy, slowest inference |
+
+**Format Selection:**
+
+| Option | Format | Recommendation |
+|:-------|:-------|:---------------|
+| 1 | ONNX (CPU mode) | Development and testing |
+| 2 | ONNX (GPU mode, FP16) | When TensorRT unavailable |
+| 3 | TensorRT Engine (FP16) | **Recommended for production** |
+| 4 | pytorch | Ultralytics native |
+
 
 
 ---
 
-#### Interactive Model Selection
+## Running Inference
 
-##### Step 1: Select Model
+### Interactive Mode
 
-Choose from the available models by entering the option number.
+Launch the main application with menu-driven configuration.
 
-##### Step 2: Automatic Download & Verification
-
-The utility automatically:
-1.  Downloads the selected YOLOv8 model from Ultralytics
-2.  Verifies successful download
-3.  Displays model information:
-   - Model file name
-   - Task type (DETECT/SEGMENT/CLASSIFY)
-   - Number of classes (for detection/segmentation)
-   - Total parameters
-   - Load time
-
----
-
-#### Usage Examples
-
-##### Load Detection Model
-```bash
-python3 src/advantech-coe-model-load.py
-
-# Interactive selection:
-# Enter option number (1-6): 1
-
-# Output:
-# Loading model: yolov8n.pt...
-# ✓ Model loaded successfully in 0.07s
-#   Task: DETECT
-#   Classes: 80
-#   Parameters: 3.16M
-```
-
-### Model Export Utility
-
-The `advantech-coe-model-export.py` utility provides an interactive interface to convert YOLOv8 models to optimized formats for edge deployment on Advantech devices:
-#### Running the Export Utility
-```bash
-python3 src/advantech-coe-model-export.py
-```
-
-#### System Verification
-
-The utility automatically detects and verifies your hardware and software environment:
-
-**Detected Device Information:**
-- Device Model (e.g., NVIDIA Jetson Orin NX)
-- GPU Architecture (e.g., Ampere)
-- Compute Capability
-- GPU Memory
-- JetPack Version
-
-**Software Dependencies Status:**
-- ultralytics
-- torch (with CUDA support)
-- onnx
-- onnxruntime
-- tensorrt
-
-**System Libraries with Path:**
-- cuda
-- cudnn
-- tensorrt_libs
-- onnx_runtime_libs
-
-#### Interactive Export Workflow
-
-**Step 1: Select YOLOv8 Task**
-
-Available tasks with input sizes:
-- **[1] Object Detection**
-- **[2] Instance Segmentation**
-- **[3] Classification** 
-
-**Step 2: Select Model Size**
-
-Available model sizes for your selected task:
-- **[1] Nano (YOLOv8n)** - Fastest inference, best for real-time on Jetson
-- **[2] Small (YOLOv8s)** - Good balance for edge devices
-- **[3] Medium (YOLOv8m)** - Higher accuracy, moderate speed
-- **[4] Large (YOLOv8l)** - High accuracy, slower inference
-- **[5] XLarge (YOLOv8x)** - Maximum accuracy, slowest inference
-
-**Step 3: Select Export Format**
-
-Export format options with device-specific optimization:
-- **[1] ONNX format (CPU mode)**
-  - Format: ONNX, Device: CPU
-  - Half precision (FP16): No, Optimize: Yes
-  - Exports to ONNX format using CPU (compatible with all systems)
-  - Requires: onnx
-
-- **[2] ONNX format (GPU mode, FP16)**
-  - Format: ONNX, Device: GPU
-  - Half precision (FP16): Yes, Optimize: No
-  - Exports to ONNX format using GPU acceleration with FP16 for Jetson
-  - Requires: onnx
-
-- **[3] TensorRT Engine (FP16) (RECOMMENDED)**
-  - Format: ENGINE, Device: GPU
-  - Half precision (FP16): Yes, Optimize: No
-  - Exports to TensorRT engine for maximum inference speed on Jetson
-  - Requires: tensorrt
-
-- **[4] TorchScript**
-  - Format: TORCHSCRIPT, Device: GPU
-  - Half precision (FP16): No, Optimize: No
-  - Exports to TorchScript format for PyTorch deployment
-  - Requires: torch
-
-**Step 4: Select Batch Export Configuration**
-
-The utility supports batch export of multiple models:
-- Proceed with batch export of 1 model? (y/n)*
-- Option to add more tasks and repeat the process
-*Press y for batch export
-
-#### Examples
-
-**Export Detection Model to TensorRT :**
-```bash
-python3 src/advantech-coe-model-export.py
-# Select: [1] Object Detection → [1] Nano → [3] TensorRT Engine (FP16)
-```
-
-**Export Segmentation Model to ONNX:**
-```bash
-python3 src/advantech-coe-model-export.py
-# Select: [2] Instance Segmentation → [1] Nano → [2] ONNX format (GPU mode, FP16)
-```
-
-**Export Classification Model to TorchScript:**
-```bash
-python3 src/advantech-coe-model-export.py
-# Select: [3] Classification → [2] Small → [4] TorchScript
-```
-
-
-## Application Usage
-
-### YOLOv8 Vision Application
-
-The main `advantech-yolo.py` application offers an interactive pipeline for running YOLOv8 models with an easy-to-use menu system:
 ```bash
 python3 src/advantech-yolo.py
 ```
 
-#### Interactive Menu Options:
+The application prompts for task type, model format, model path, input source, and output options. Press `q` in the display window or `Ctrl+C` to stop.
 
-1. **Task Selection**:
-   - [1] Detection
-   - [2] Classification
-   - [3] Segmentation
+### Command Line Mode
 
-2. **Format Selection**:
-   - [1] PyTorch
-   - [2] ONNX
-   - [3] TensorRT
+For scripted or automated use, specify options directly.
 
-3. **Source Selection**:
-   - [1] Webcam
-   - [2] RTSP
-   - [3] File
+```bash
+python3 src/advantech-yolo.py --model yolov8n.engine --source 0 --task detection
+```
 
-4. **Camera/Resolution Configuration**:
-   - Automatic camera discovery with device listing
-   - Resolution selection (e.g., 1920x1080)
+```bash
+python3 src/advantech-yolo.py --model yolov8n-seg.engine --source /path/to/your/video_file --task segmentation
+```
 
-5. **Output Options**:
-   - Save output: (y/n)
-   - Show display: (y/n)
+```bash
+python3 src/advantech-yolo.py --model yolov8n-cls.onnx --source rtsp://your-camera-ip:port/ --task classification
+```
 
-The pipeline will then start processing with real-time feedback including:
-- Model loading status
-- Warm-up progress
-- FPS counter
-- Flask app serving for Health Check
+**Available Options:**
 
-Press 'q' in the display window or Ctrl+C to stop the pipeline.
+| Option | Description | Default |
+|:-------|:------------|:--------|
+| `--model` | Model file path | Required |
+| `--source` | Input source (device number, URL, or file path) | Required |
+| `--task` | detection, classification, or segmentation | detection |
+| `--format` | pt, onnx, or trt | Auto-detected |
+| `--conf` | Confidence threshold | 0.25 |
+| `--iou` | IoU threshold for NMS | 0.45 |
+| `--save-video` | Save output to file | False |
+| `--output` | Output directory | ./output |
+| `--no-display` | Disable visualization | False |
 
-### Results:
- 
- #### Object Detection
-![Advantech Logo](data/Detection.gif)
- #### Instance Segmentation
-![Advantech Logo](data/segmentation.gif)
- #### Classification
- ![Advantech Logo](data/classification.gif)
+---
+
+## Export Formats
+
+Choosing the correct export format significantly affects inference speed.
+
+### TensorRT Engine (Recommended)
+
+TensorRT is NVIDIA's inference optimizer and produces the fastest results on Jetson hardware. It fuses operations, optimizes memory layout, and calibrates precision automatically. FP16 precision reduces memory usage with minimal accuracy loss. Note that engine files are device-specific and not portable between different GPU architectures.
+
+### ONNX (GPU Mode)
+
+ONNX with CUDA execution provides good performance when TensorRT is unavailable. The FP16 variant uses half-precision for improved throughput. This format offers cross-platform compatibility but moderate performance compared to TensorRT.
+
+### ONNX (CPU Mode)
+
+ONNX with CPU execution runs on any system without GPU requirements. This format provides universal compatibility but the slowest performance. It is suitable for development and testing only.
+
+### TorchScript
+
+PyTorch's serialization format maintains ecosystem compatibility and is useful for PyTorch-specific deployment pipelines. Performance is moderate.
+
+**Performance Comparison:**
+
+| Format | Relative Speed | Primary Use Case |
+|:-------|:---------------|:-----------------|
+| TensorRT FP16 | Fastest | Production deployment |
+| ONNX GPU FP16 | Fast | TensorRT unavailable |
+| ONNX CPU | Slow | Development and testing |
+| Pytorch | Fast | Ultralytics native |
+
+---
+
+## Performance Guidelines
+
+### Recommended Configurations
+
+| Task | Model | Format | Notes |
+|:-----|:------|:-------|:------|
+| Object Detection | YOLOv8n or YOLOv8s | TensorRT | Best real-time performance |
+| Instance Segmentation | YOLOv8n-seg or YOLOv8s-seg | TensorRT | Includes mask output |
+| Classification | YOLOv8n-cls or YOLOv8s-cls | TensorRT | 224×224 input size |
+
+### Optimization Notes
+
+Use Nano models for applications that require the maximum frame rate. Use Small models when accuracy is prioritized over speed. TensorRT engines must be rebuilt when moving between different Jetson models. Input resolution affects both speed and accuracy; 640×480 is the default for detection and segmentation. FP16 precision is enabled by default for TensorRT exports.
+
+---
 
 
+## Results
 
-### Step-by-Step Usage Guide
+### Object Detection
 
-1. **Set Up Environment**:
-   - Start the Docker container using `./build.sh`
-   - This initializes all hardware acceleration settings and dependencies
+![Detection](data/detection_engine.gif)
 
-2. **Download Models**:
-   - Use `advantech-coe-model-load.py` to download appropriate YOLOv8 models
-   - Choose model size based on your device capability ('n' or 's' recommended)
+### Instance Segmentation
 
-3. **Convert Models (Optional)**:
-   - Use `advantech-coe-model-export.py` to convert to optimized formats
-   - TensorRT format (engine) provides the best performance on Advantech devices
+![Segmentation](data/segmentation_webcam.gif)
 
-4. **Run Applications**:
-   - Use `advantech-yolo.py` with appropriate parameters for your use case
-   - Configure input source, model, and task type as needed
-   - Enable visualization with `--show` parameter
+### Classification
 
-5. **Analyze Results**:
-   - View real-time results on screen or examine saved outputs
-   - Output includes annotations, bounding boxes, segments, or classifications based on task
+![Classification](data/classification_engine.gif)
+
+---
 
 ## Directory Structure
 
 ```
 Advantech-YOLO-Vision-Applications/
-├── data/                           # Sample test data
-├── src/                            # Source code for applications
-│   ├── advantech-coe-model-export.py  # Model export utility
+├── src/
 │   ├── advantech-coe-model-load.py    # Model download utility
-│   ├── advantech-yolo.py              # Main interactive YOLO application
-│   ├── advantech-core.py              # Core functionality and utilities
-│   └── advantech-classes.py           # Class definitions and configurations
-├── docker-compose.yml              # Docker Compose configuration
-├── build.sh                        # Container build and launch script
-├── init.sh                         # Initialization script
-├── wise-bench.sh                   # AI accelerator verification script
-├── LICENSE                         # License information
-└── README.md                       # This file
+│   ├── advantech-coe-model-export.py  # Model export utility
+│   ├── advantech-yolo.py              # Main inference application
+│   ├── advantech_core.py              # Inference engine implementations
+│   └── advantech_classes.py           # Class label definitions
+├── data/                               # Sample data and outputs
+├── models/                             # Model storage (created at runtime)
+├── docker-compose.yml                  # Container configuration
+├── build.sh                            # Container launch script
+├── init.sh                             # Dependency installer
+├── wise-bench.sh                       # Hardware diagnostics
+├── LICENSE                             # GPL-3.0 license
+└── README.md
 ```
 
-## Performance Recommendations
-
-For optimal performance on Advantech edge AI devices:
-
-| Task | Recommended Model | Optimal Format |
-|------|------------------|----------------|
-| Object Detection | YOLOv8n/s | TensorRT Engine |
-| Instance Segmentation | YOLOv8n-seg/s-seg | TensorRT Engine |
-| Classification | YOLOv8n-cls/s-cls | TensorRT Engine |
-
-The toolkit automatically selects appropriate configurations based on your device, with preference for smaller and more efficient models (n and s variants) to ensure real-time performance.
+---
 
 ## Limitations
 
-The current version of the toolkit has the following limitations:
+| Limitation | Description |
+|:-----------|:------------|
+| Model Size | Only Nano and Small variants are optimized for real-time inference on edge devices |
+| Pre-trained Only | Custom training requires external tools; import trained models for inference |
+| Resolution | Performance degrades above 1080p; use 640×480 or 1280×720 for best results |
+| Network | Model download requires internet connectivity; inference runs offline |
+| Display | Visualization requires X11 forwarding (run `xhost +local:docker` on host) |
+| Classes | Detection uses COCO classes; classification uses ImageNet classes |
+| Streams | Single input stream per container instance |
 
-1. **Model Size Constraints**: Only supports 'n' and 's' model variants to maintain real-time performance on edge devices. Larger models may exceed memory or computational capabilities of some devices.
-
-2. **Pre-trained Models Only**: Currently limited to pre-trained YOLOv8 models. Custom model training requires external workflows.
-
-3. **Resolution Limits**: Performance degrades with very high-resolution inputs (>1080p). For best results, use input at 640×640 or 1280×720 resolution.
-
-4. **Network Dependency**: Initial model downloading requires internet connectivity.
-
-5. **X11 Display Requirements**: Visualization features require X11 forwarding to be properly configured.
-
-6. **Fixed Detection Classes**: Models use pre-trained COCO classes and cannot be dynamically changed without retraining.
-
-7. **Single Stream Processing**: Currently supports processing one input stream at a time.
-
+---
 
 
 ## Use Cases
 
 This toolkit is ideal for:
 
-- **Industrial Quality Inspection**: Detect defects and inspect parts with instance segmentation
-- **Smart Retail**: Product recognition, customer behavior analysis
-- **Smart Cities**: Traffic monitoring, crowd analysis, object tracking
-- **Security & Surveillance**: Perimeter monitoring, intrusion detection
-- **Agriculture**: Crop monitoring, livestock tracking
-- **Healthcare**: Medical image analysis, equipment tracking
-- **Robotics**: Environmental perception, object manipulation guidance
+* **Industrial Quality Inspection:** Detect defects and inspect parts with instance segmentation
+* **Smart Retail:** Product recognition, customer behavior analysis
+* **Smart Cities:** Traffic monitoring, crowd analysis, object tracking
+* **Security & Surveillance:** Perimeter monitoring, intrusion detection
+* **Agriculture:** Crop monitoring, livestock tracking
+* **Healthcare:** Medical image analysis, equipment tracking
+* **Robotics:** Environmental perception, object manipulation guidance
+
+---
 
 ## License
 
-Copyright (c) 2025 Advantech Corporation. All rights reserved.
+GNU General Public License v3.0
 
-This software is provided by Advantech Corporation "as is" and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed.
+Copyright © 2025 Advantech Corporation. All rights reserved.
+This software is provided by Advantech Corporation "as is" and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose, are disclaimed.
 
-For complete license details, see the [LICENSE](https://github.com/Advantech-EdgeSync-Containers/Advantech-YOLO-Vision-Applications/blob/main/LICENSE) file.
+
+For complete license details, see [LICENSE](LICENSE) for complete terms.
+
+---
 
 ## Acknowledgments
 
-- **[Ultralytics](https://github.com/ultralytics/ultralytics)**: For the YOLOv8 framework that powers this toolkit. 
-  ```bash
-  # Required specific versions:
-  pip install ultralytics==8.0.43 --no-deps
-  pip install ultralytics-thop==2.0.14 --no-deps
-  ```
+This toolkit builds upon [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) for the core detection, segmentation, and classification framework, and [NVIDIA](https://developer.nvidia.com/) for CUDA, TensorRT, and the Jetson platform.
 
+Required framework installation:
 
-- **[NVIDIA](https://developer.nvidia.com/)**: For CUDA, TensorRT, and other acceleration libraries that enable optimal performance on Advantech edge AI devices.
+```bash
+pip install ultralytics==8.0.43 --no-deps
+pip install ultralytics-thop==2.0.14 --no-deps
+```
 
+---
 
+## Support
 
+For documentation and troubleshooting, visit the [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide).
 
+For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Containers/Advantech-YOLO-Vision-Applications/issues).
 
+---
 
-
-
-
+Advantech Corporation — Center of Excellence
