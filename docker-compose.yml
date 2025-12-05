@@ -1,4 +1,3 @@
-version: '2.4'
 # ==========================================================================
 # Advantech YOLO Vision Applications Docker Compose File
 # ==========================================================================
@@ -166,5 +165,6 @@ services:
 # 5. For CSI cameras, use nvarguscamerasrc:
 #    gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! nvvidconv ! xvimagesink
 # ==========================================================================
+
 
 
