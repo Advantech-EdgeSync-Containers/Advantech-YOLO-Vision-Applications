@@ -130,7 +130,7 @@ Run the diagnostic script to confirm hardware acceleration is working.
 ./wise-bench.sh
 ```
 The wise-bench script will run as below as per the system specifications.
-![wise-bench](data/wisebench.gif)
+![wise-bench](data/wisebench.png)
 
 ---
 
@@ -307,7 +307,7 @@ Use Nano models for applications that require the maximum frame rate. Use Small 
 
 ### Classification
 
-![Classification](data/classification_engine.gif)
+![Classification](data/classification.gif)
 
 ---
 
@@ -396,4 +396,5 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
