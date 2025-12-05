@@ -88,10 +88,10 @@ The Docker container includes the following pre-configured components.
 Before proceeding, ensure that your system meets the required [System Requirements](#system-requirements). If you encounter any issues or inconsistencies in your environment, please consult our [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide) for solutions and to verify that all prerequisites are properly satisfied
 
 - Ensure the following components are installed on your [Host System](#system-requirements):
-  - **Docker** (v28.1.1 or compatible)
-  - **Docker Compose** (v2.39.1 or compatible)
-  - **NVIDIA Container Toolkit** (v1.11.0 or compatible)
-  - **NVIDIA Runtime** configured in Docker
+  - **Docker**
+  - **Docker Compose**
+  - **NVIDIA Container Toolkit**
+  - **NVIDIA Runtime** 
 
 ---
 
@@ -413,6 +413,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
