@@ -282,9 +282,9 @@ ONNX with CUDA execution provides good performance when TensorRT is unavailable.
 
 ONNX with CPU execution runs on any system without GPU requirements. This format provides universal compatibility but the slowest performance. It is suitable for development and testing only.
 
-### TorchScript
+### Pytorch
 
-PyTorch's serialization format maintains ecosystem compatibility and is useful for PyTorch-specific deployment pipelines. Performance is moderate.
+PyTorch's serialization format maintains ecosystem compatibility as its Ultralytics native and is useful for PyTorch-specific deployment pipelines. Performance is Fast.
 
 **Performance Comparison:**
 
@@ -303,9 +303,9 @@ PyTorch's serialization format maintains ecosystem compatibility and is useful f
 
 | Task | Model | Format | Notes |
 |:-----|:------|:-------|:------|
-| Object Detection | YOLOv8n or YOLOv8s | TensorRT | Best real-time performance |
+| Object Detection | YOLOv8n or YOLOv8s | TensorRT/Onnx | Best real-time performance |
 | Instance Segmentation | YOLOv8n-seg or YOLOv8s-seg | TensorRT | Includes mask output |
-| Classification | YOLOv8n-cls or YOLOv8s-cls | TensorRT | 224×224 input size |
+| Classification | YOLOv8n-cls or YOLOv8s-cls | Pytorch | 224×224 input size |
 
 ### Optimization Notes
 
@@ -397,6 +397,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
