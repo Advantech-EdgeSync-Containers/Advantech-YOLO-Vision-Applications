@@ -36,6 +36,7 @@ For troubleshooting, see the [Troubleshooting Wiki](https://github.com/Advantech
 ## Table of Contents
 
 - [System Requirements](#system-requirements)
+- [Before You Start](#before-you-start)
 - [Quick Start](#quick-start)
 - [Model Management](#model-management)
 - [Running Inference](#running-inference)
@@ -413,6 +414,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
