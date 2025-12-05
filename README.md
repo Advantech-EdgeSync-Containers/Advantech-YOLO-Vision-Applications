@@ -8,7 +8,7 @@ A containerized toolkit for deploying YOLOv8 computer vision applications on Adv
 
 ## Overview
 
-This repository provides a production-ready Docker environment for running YOLOv8 inference on NVIDIA Jetson-based Advantech hardware. The container includes pre-configured software for object detection, instance segmentation, and image classification with full GPU acceleration.
+This repository provides a ready to use Docker environment for running YOLOv8 inference on NVIDIA Jetson-based Advantech hardware. The container includes pre-configured software for object detection, instance segmentation, and image classification with full GPU acceleration.
 
 The toolkit automatically detects device capabilities and configures optimal settings for real-time performance.
 
@@ -413,6 +413,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
