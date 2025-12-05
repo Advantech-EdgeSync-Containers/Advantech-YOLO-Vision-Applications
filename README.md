@@ -215,6 +215,25 @@ python3 src/advantech-yolo.py
 
 The application prompts for task type, model format, model path, input source, and output options. Press `q` in the display window or `Ctrl+C` to stop.
 
+---
+
+
+## Interactive Workflow Results
+
+### Object Detection
+
+![Detection](data/detection_engine.gif)
+
+### Instance Segmentation
+
+![Segmentation](data/segmentation_webcam.gif)
+
+### Classification
+
+![Classification](data/classification.gif)
+
+---
+
 ### Command Line Mode
 
 For scripted or automated use, specify options directly.
@@ -292,24 +311,6 @@ PyTorch's serialization format maintains ecosystem compatibility and is useful f
 
 Use Nano models for applications that require the maximum frame rate. Use Small models when accuracy is prioritized over speed. TensorRT engines must be rebuilt when moving between different Jetson models. Input resolution affects both speed and accuracy; 640×480 is the default for detection and segmentation. FP16 precision is enabled by default for TensorRT exports.
 
----
-
-
-## Results
-
-### Object Detection
-
-![Detection](data/detection_engine.gif)
-
-### Instance Segmentation
-
-![Segmentation](data/segmentation_webcam.gif)
-
-### Classification
-
-![Classification](data/classification.gif)
-
----
 
 ## Directory Structure
 
@@ -396,5 +397,6 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
