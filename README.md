@@ -18,7 +18,16 @@ The toolkit automatically detects device capabilities and configures optimal set
 |:------------|:------------|
 | Object Detection | Real-time detection with bounding boxes for 80 COCO classes |
 | Instance Segmentation | Pixel-level masks for precise object boundaries |
-| Image Classification | Categorization across 1,000 ImageNet classes |
+| Image Classification | Categorization across 1,000 ImageNet classes |'
+
+### Supported Hardware
+
+| Specification | Details |
+|:--------------|:--------|
+| Platform | NVIDIA Jetson (Orin, Xavier, TX2) |
+| GPU Architecture | Ampere, Volta, Pascal |
+| Memory | 4GB, 8GB, or 16GB shared |
+| JetPack | 5.x |
 
 For troubleshooting, see the [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide).
 
@@ -40,7 +49,7 @@ For troubleshooting, see the [Troubleshooting Wiki](https://github.com/Advantech
 
 ## System Requirements
 
-### Host System
+### General Required Packages on Host System
 
 Install these components on your Advantech device before using this toolkit.
 
@@ -55,7 +64,7 @@ Install these components on your Advantech device before using this toolkit.
 | Docker Compose | 2.39.1 or later |
 | NVIDIA Container Toolkit | 1.11.0 or later |
 
-Component versions depend on your **JetPack Version**. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) for details.
+Component versions depend on your **JetPack Version**. See [NVIDIA JetPack Documentation](https://developer.nvidia.com/embedded/jetpack) and **SDK Managaer** see [SDK Manager](https://developer.nvidia.com/sdk-manager)for details. 
 
 ### Container Environment
 
@@ -72,18 +81,18 @@ The Docker container includes the following pre-configured components.
 | OpenCV | 4.5.0 | Computer vision library with CUDA |
 | GStreamer | 1.16.2 | Multimedia framework |
 
-### Supported Hardware
 
-| Specification | Details |
-|:--------------|:--------|
-| Platform | NVIDIA Jetson (Orin, Xavier, TX2) |
-| GPU Architecture | Ampere, Volta, Pascal |
-| Memory | 4GB, 8GB, or 16GB shared |
-| JetPack | 5.x |
 
 
 ## Before You Start
 Before proceeding, ensure that your system meets the required [System Requirements](#system-requirements). If you encounter any issues or inconsistencies in your environment, please consult our [Troubleshooting Wiki](https://github.com/Advantech-EdgeSync-Containers/GPU-Passthrough-on-NVIDIA-Jetson/wiki/Advantech-Containers'-Troubleshooting-Guide) for solutions and to verify that all prerequisites are properly satisfied
+
+- Ensure the following components are installed on your [Host System](#system-requirements):
+  - **Docker** (v28.1.1 or compatible)
+  - **Docker Compose** (v2.39.1 or compatible)
+  - **NVIDIA Container Toolkit** (v1.11.0 or compatible)
+  - **NVIDIA Runtime** configured in Docker
+
 ---
 
 ## Quick Start
@@ -404,6 +413,7 @@ For issues, submit to [GitHub Issues](https://github.com/Advantech-EdgeSync-Cont
 ---
 
 Advantech Corporation — Center of Excellence
+
 
 
 
