@@ -50,6 +50,18 @@ For troubleshooting, see the [Troubleshooting Guide](TROUBLESHOOTING_YOLO11.md).
 
 ## System Requirements
 
+### Host System Requirements
+
+| Component | Version/Requirement |
+|-----------|---------|
+| **JetPack** | 6.x |
+| **CUDA** | 12.6.68 |
+| **cuDNN** | 9.3.0.75 |
+| **TensorRT** | 10.3.0.30 |
+| **OpenCV** | 4.8.0 |
+
+* CUDA , CuDNN , TensorRT , OpenCV versions Depends on JetPack version 6.x
+
 ### General Required Packages on Host System
 
 Install these components on your Advantech device before using this toolkit.
@@ -83,6 +95,14 @@ The Docker container includes the following pre-configured components.
 | GStreamer | 1.20+ | Multimedia framework |
 
 ## Before You Start
+
+Ensure the following prerequisites are met:
+
+- **Docker**: Version `28.1.1` or later
+- **Docker Compose**: Version `2.39.1` or later
+- **NVIDIA Container Toolkit**: Version `1.11.0` or later
+
+For installation instructions, refer to the [Installation Guide](https://github.com/yqlbu/jetson-packages-family/blob/main/README.md).
 
 Before proceeding, ensure that your system meets the required [general-required-packages-on-host-system](#general-required-packages-on-host-system). If you encounter any issues or inconsistencies in your environment, please consult our [Troubleshooting Guide](TROUBLESHOOTING_YOLO11.md) for solutions and to verify that all prerequisites are properly satisfied.
 
@@ -146,6 +166,18 @@ Run a basic test to confirm hardware acceleration is working.
 ```bash
 python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA Available: {torch.cuda.is_available()}')"
 ```
+
+### Step 6: Verify AI Accelerator (Optional)
+
+Verify that the AI accelerator is properly configured and accessible. Use the Wise-Bench tool to run benchmarks on your device.
+
+```bash
+# Ensure you're inside the container
+chmod +x wise-bench.sh
+./wise-bench.sh
+```
+
+The script runs comprehensive tests to validate GPU functionality and report performance metrics. Expected output confirms CUDA availability, memory allocation success, and benchmark completion.
 
 ---
 
@@ -380,6 +412,8 @@ Copyright © 2025 Advantech Corporation. All rights reserved.
 This software is provided by Advantech Corporation "as is" and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose, are disclaimed.
 
 For complete license details, see [LICENSE](LICENSE) for complete terms.
+
+For troubleshooting and FAQ, visit the [Wiki](https://github.com/yqlbu/jetson-packages-family/wiki).
 
 ---
 
